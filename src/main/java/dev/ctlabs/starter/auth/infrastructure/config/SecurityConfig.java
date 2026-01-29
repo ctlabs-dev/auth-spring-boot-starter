@@ -1,5 +1,7 @@
 package dev.ctlabs.starter.auth.infrastructure.config;
 
+
+import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,13 +35,14 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationProvider authenticationProvider) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationProvider authenticationProvider, AuthProperties authProperties) throws Exception {
+        String authBaseUrl = authProperties.getBaseUrl();
+        String authPath = "%s%s".formatted(authBaseUrl, "/**");
         http
-                // IMPORTANTE: Limita esta cadena de filtros solo a las rutas que empiezan con /api
-                .securityMatcher("/api/**")
+                .securityMatcher(authPath)
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error")
+                        .requestMatchers(authPath, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error")
                         .permitAll()
                         .anyRequest().authenticated()
                 )

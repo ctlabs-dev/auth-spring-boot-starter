@@ -8,9 +8,9 @@ import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
 import dev.ctlabs.starter.auth.application.mapper.UserMapper;
+import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import dev.ctlabs.starter.auth.domain.model.Verification;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
-import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtService;
 import dev.ctlabs.starter.auth.infrastructure.service.EmailService;
 import dev.ctlabs.starter.auth.infrastructure.service.SmsService;
@@ -100,6 +100,7 @@ public class AuthService {
         var user = userMapper.toEntity(request);
 
         user.setPassword(passwordEncoder.encode(request.password()));
+        user.setRole(authProperties.getDefaultRole());
 
         var verification = new Verification();
         if (hasEmail) verification.setEmailVerificationCode(UUID.randomUUID().toString());
@@ -203,5 +204,18 @@ public class AuthService {
         userRepository.save(user);
 
         return new AuthResponse("Password reset successfully.");
+    }
+
+    @Transactional
+    public AuthResponse updateRole(String username, String newRole) {
+        var user = userRepository.findByEmail(username)
+                .or(() -> userRepository.findByPhoneNumber(username))
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+        user.setRole(newRole);
+        userRepository.save(user);
+        log.info("Role updated for user: {} to {}", username, newRole);
+
+        return new AuthResponse("Role updated successfully.");
     }
 }
