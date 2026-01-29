@@ -7,7 +7,6 @@ import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
-import dev.ctlabs.starter.auth.domain.model.Role;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -121,7 +120,7 @@ class AuthControllerTest {
         user.setLastName("User");
         user.setEmail("existing@test.com");
         user.setPassword(passwordEncoder.encode("Password123!"));
-        user.setRole(Role.CUSTOMER);
+        user.setRole("ROLE_CUSTOMER");
         userRepository.save(user);
 
         var request = new RegisterRequest(
@@ -146,7 +145,7 @@ class AuthControllerTest {
         user.setLastName("User");
         user.setPhoneNumber("+59170712345");
         user.setPassword(passwordEncoder.encode("Password123!"));
-        user.setRole(Role.CUSTOMER);
+        user.setRole("ROLE_CUSTOMER");
         userRepository.save(user);
 
         var request = new RegisterRequest(

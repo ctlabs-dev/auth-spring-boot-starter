@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users
     email           VARCHAR(150),
     phone_number    VARCHAR(15),
     password        TEXT,
-    role            VARCHAR(15),
+    role            VARCHAR(50),
     verification_id BIGINT,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW(),

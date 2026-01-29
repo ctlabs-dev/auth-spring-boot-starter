@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("${ctlabs.auth.base-url:/api/auth}")
 public class AuthController {
 
     private final AuthService authService;

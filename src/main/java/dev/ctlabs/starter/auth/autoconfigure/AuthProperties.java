@@ -9,11 +9,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "ctlabs.auth")
 public class AuthProperties {
 
+    private String baseUrl = "/api/auth";
     private String frontendUrl = "http://localhost:3000";
+    private String defaultRole = "ROLE_CUSTOMER";
     private Jwt jwt = new Jwt();
     private Twilio twilio = new Twilio();
     private Notifications notifications = new Notifications();
     private Db db = new Db();
+    private Admin admin = new Admin();
 
     @Getter
     @Setter
@@ -40,14 +43,18 @@ public class AuthProperties {
         @Getter
         @Setter
         public static class Mail {
-            /** Habilita el envío de correos. Requiere spring.mail.* */
+            /**
+             * Enables email sending. Requires spring.mail.*
+             */
             private boolean enabled = false;
         }
 
         @Getter
         @Setter
         public static class Sms {
-            /** Habilita el envío de SMS. Requiere Twilio y phone-number. */
+            /**
+             * Enables SMS sending. Requires Twilio and phone-number.
+             */
             private boolean enabled = false;
             private String phoneNumber;
         }
@@ -55,7 +62,9 @@ public class AuthProperties {
         @Getter
         @Setter
         public static class Whatsapp {
-            /** Habilita el envío de WhatsApp. Requiere Twilio y whatsapp-number. */
+            /**
+             * Enables WhatsApp sending. Requires Twilio and whatsapp-number.
+             */
             private boolean enabled = false;
             private String phoneNumber;
         }
@@ -64,7 +73,23 @@ public class AuthProperties {
     @Getter
     @Setter
     public static class Db {
-        /** Habilita la migración automática de las tablas del starter (users, verification). */
+        /**
+         * Enables automatic migration of starter tables (users, verification).
+         */
         private boolean migrationEnabled = true;
+    }
+
+    @Getter
+    @Setter
+    public static class Admin {
+        /**
+         * If true, attempts to create an admin user at startup if it doesn't exist.
+         */
+        private boolean enabled = false;
+        private String email;
+        private String password;
+        private String firstName = "Admin";
+        private String lastName = "System";
+        private String role = "ROLE_ADMIN";
     }
 }

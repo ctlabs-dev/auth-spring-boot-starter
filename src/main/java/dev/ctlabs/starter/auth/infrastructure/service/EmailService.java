@@ -38,7 +38,7 @@ public class EmailService {
         if (authProperties.getNotifications().getMail().isEnabled()) {
             String mailHost = environment.getProperty("spring.mail.host");
             if (mailHost == null || mailHost.isBlank()) {
-                log.warn("\n\n*** ADVERTENCIA DE CONFIGURACIÓN ***\nHas habilitado 'ctlabs.auth.notifications.mail.enabled=true', pero no se detectó configuración para 'spring.mail.host'.\nEs probable que el envío de correos falle. Por favor configura las propiedades de spring.mail en tu application.properties.\n");
+                log.warn("\n\n*** CONFIGURATION WARNING ***\nYou have enabled 'ctlabs.auth.notifications.mail.enabled=true', but no configuration was detected for 'spring.mail.host'.\nEmail sending is likely to fail. Please configure spring.mail properties in your application.properties.\n");
             }
         }
     }
@@ -62,7 +62,7 @@ public class EmailService {
 
             helper.setTo(to);
             helper.setFrom("noreply@distribol.com");
-            helper.setSubject("Verifica tu correo electrónico");
+            helper.setSubject("Verify your email");
             helper.setText(htmlContent, true);
 
             mailSender.send(mimeMessage);
@@ -91,7 +91,7 @@ public class EmailService {
 
             helper.setTo(to);
             helper.setFrom("noreply@distribol.com");
-            helper.setSubject("Restablecer contraseña");
+            helper.setSubject("Reset password");
             helper.setText(htmlContent, true);
 
             mailSender.send(mimeMessage);

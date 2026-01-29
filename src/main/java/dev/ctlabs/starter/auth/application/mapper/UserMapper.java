@@ -14,7 +14,7 @@ import org.mapstruct.ReportingPolicy;
 public interface UserMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "role", constant = "CUSTOMER")
+    @Mapping(target = "role", ignore = true)
     @Mapping(target = "verification", ignore = true)
     @Mapping(target = "password", ignore = true)
     User toEntity(RegisterRequest request);
