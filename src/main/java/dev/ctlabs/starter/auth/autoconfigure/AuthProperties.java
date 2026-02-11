@@ -11,12 +11,13 @@ public class AuthProperties {
 
     private String baseUrl = "/api/auth";
     private String frontendUrl = "http://localhost:3000";
-    private String defaultRole = "ROLE_CUSTOMER";
+    private String defaultRole = "ROLE_USER";
     private Jwt jwt = new Jwt();
-    private Twilio twilio = new Twilio();
     private Notifications notifications = new Notifications();
     private Db db = new Db();
     private Admin admin = new Admin();
+    private Verification verification = new Verification();
+    private Password password = new Password();
 
     @Getter
     @Setter
@@ -27,46 +28,82 @@ public class AuthProperties {
 
     @Getter
     @Setter
-    public static class Twilio {
-        private String accountSid;
-        private String authToken;
-        private String whatsappContentSid;
-    }
-
-    @Getter
-    @Setter
     public static class Notifications {
         private Mail mail = new Mail();
-        private Sms sms = new Sms();
-        private Whatsapp whatsapp = new Whatsapp();
+        private Phone phone = new Phone();
 
         @Getter
         @Setter
         public static class Mail {
+            public enum Provider {
+                NONE,
+                SMTP,
+                BREVO,
+                MAILCHIMP
+            }
+
             /**
-             * Enables email sending. Requires spring.mail.*
+             * Selects the mail provider. Default is NONE.
              */
-            private boolean enabled = false;
+            private Provider provider = Provider.NONE;
+
+            private String fromEmail = "noreply@distribol.com";
+            private String fromName = "Auth Service";
+
+            private Brevo brevo = new Brevo();
+
+            @Getter
+            @Setter
+            public static class Brevo {
+                /**
+                 * Brevo API Key (xkeysib-...)
+                 */
+                private String apiKey;
+                private String baseUrl = "https://api.brevo.com/v3";
+                private Integer verificationTemplateId;
+                private Integer passwordResetTemplateId;
+            }
         }
 
         @Getter
         @Setter
-        public static class Sms {
-            /**
-             * Enables SMS sending. Requires Twilio and phone-number.
-             */
-            private boolean enabled = false;
-            private String phoneNumber;
-        }
+        public static class Phone {
+            public enum Provider {
+                NONE,
+                TWILIO,
+                BREVO
+            }
 
-        @Getter
-        @Setter
-        public static class Whatsapp {
+            public enum Channel {
+                SMS,
+                WHATSAPP
+            }
+
             /**
-             * Enables WhatsApp sending. Requires Twilio and whatsapp-number.
+             * Selects the phone provider. Default is NONE.
              */
-            private boolean enabled = false;
-            private String phoneNumber;
+            private Provider provider = Provider.NONE;
+            private Channel channel = Channel.SMS;
+            private String fromPhoneNumber; // Generic 'from' number (e.g. +1234567890 or whatsapp:+123...)
+
+            private Twilio twilio = new Twilio();
+            private Brevo brevo = new Brevo();
+
+            @Getter
+            @Setter
+            public static class Twilio {
+                private String accountSid;
+                private String authToken;
+                private String baseUrl = "https://api.twilio.com";
+            }
+
+            @Getter
+            @Setter
+            public static class Brevo {
+                private String apiKey;
+                private String baseUrl = "https://api.brevo.com/v3";
+                private String senderName = "AuthService"; // Max 11 alphanumeric chars for SMS
+            }
         }
     }
 
@@ -91,5 +128,39 @@ public class AuthProperties {
         private String firstName = "Admin";
         private String lastName = "System";
         private String role = "ROLE_ADMIN";
+    }
+
+    @Getter
+    @Setter
+    public static class Verification {
+        /**
+         * Expiration time for email verification links in minutes. Default: 1440 (24 hours).
+         */
+        private long emailLinkExpirationMinutes = 1440;
+
+        /**
+         * Expiration time for phone verification codes in minutes. Default: 10.
+         */
+        private long phoneCodeExpirationMinutes = 10;
+
+        /**
+         * Label for minutes unit (e.g. "minutes", "minutos"). Default: "minutes".
+         */
+        private String unitMinutes = "minutes";
+
+        /**
+         * Label for hours unit (e.g. "hours", "horas"). Default: "hours".
+         */
+        private String unitHours = "hours";
+    }
+
+    @Getter
+    @Setter
+    public static class Password {
+        /**
+         * Regex for password validation.
+         */
+        private String validationRegex = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=\\S+$).{8,20}$";
+        private String validationMessage = "Password must be 8-20 characters long, contain at least one digit, one lowercase, one uppercase letter and no whitespace";
     }
 }

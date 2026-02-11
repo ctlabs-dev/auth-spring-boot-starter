@@ -7,14 +7,19 @@ import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
-import dev.ctlabs.starter.auth.application.mapper.UserMapper;
 import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
-import dev.ctlabs.starter.auth.domain.model.Verification;
+import dev.ctlabs.starter.auth.domain.model.Profile;
+import dev.ctlabs.starter.auth.domain.model.Role;
+import dev.ctlabs.starter.auth.domain.model.User;
+import dev.ctlabs.starter.auth.domain.model.VerificationCode;
+import dev.ctlabs.starter.auth.domain.repository.RoleRepository;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtService;
 import dev.ctlabs.starter.auth.infrastructure.service.EmailService;
-import dev.ctlabs.starter.auth.infrastructure.service.SmsService;
+import dev.ctlabs.starter.auth.infrastructure.service.PhoneService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -22,6 +27,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Random;
 import java.util.UUID;
 
@@ -30,29 +37,32 @@ import java.util.UUID;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final VerificationCodeRepository verificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final UserMapper userMapper;
     private final EmailService emailService;
-    private final SmsService smsService;
+    private final PhoneService phoneService;
     private final AuthProperties authProperties;
 
     public AuthService(UserRepository userRepository,
+                       RoleRepository roleRepository,
+                       VerificationCodeRepository verificationCodeRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        AuthenticationManager authenticationManager,
-                       UserMapper userMapper,
                        EmailService emailService,
-                       SmsService smsService,
+                       PhoneService phoneService,
                        AuthProperties authProperties) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.verificationCodeRepository = verificationCodeRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
-        this.userMapper = userMapper;
         this.emailService = emailService;
-        this.smsService = smsService;
+        this.phoneService = phoneService;
         this.authProperties = authProperties;
     }
 
@@ -97,24 +107,61 @@ public class AuthService {
             }
         }
 
-        var user = userMapper.toEntity(request);
-
+        User user = new User();
+        user.setEmail(request.email());
+        user.setPhoneNumber(request.phoneNumber());
         user.setPassword(passwordEncoder.encode(request.password()));
-        user.setRole(authProperties.getDefaultRole());
+        user.setStatus("active");
 
-        var verification = new Verification();
-        if (hasEmail) verification.setEmailVerificationCode(UUID.randomUUID().toString());
-        if (hasPhone) verification.setPhoneVerificationCode(String.valueOf(new Random().nextInt(1000000)));
-        user.setVerification(verification);
+        Profile profile = new Profile();
+        profile.setFirstName(request.firstName());
+        profile.setLastName(request.lastName());
+        profile.setUser(user);
+        user.setProfile(profile);
 
-        userRepository.save(user);
+        String defaultRoleName = authProperties.getDefaultRole();
+        Role role = roleRepository.findByName(defaultRoleName)
+                .orElseGet(() -> {
+                    Role newRole = new Role();
+                    newRole.setName(defaultRoleName);
+                    return roleRepository.save(newRole);
+                });
+        user.getRoles().add(role);
 
-        if (hasEmail && authProperties.getNotifications().getMail().isEnabled()) {
-            emailService.sendVerificationEmail(user.getEmail(), user.getFirstName(), verification.getEmailVerificationCode());
+        boolean isEmailProviderNone = authProperties.getNotifications().getMail().getProvider() == AuthProperties.Notifications.Mail.Provider.NONE;
+        if (hasEmail && isEmailProviderNone) {
+            user.setEmailVerified(true);
         }
 
-        if (hasPhone && (authProperties.getNotifications().getSms().isEnabled() || authProperties.getNotifications().getWhatsapp().isEnabled())) {
-            smsService.sendVerificationCode(user.getPhoneNumber(), verification.getPhoneVerificationCode(), authProperties.getNotifications().getWhatsapp().isEnabled(), authProperties.getNotifications().getSms().isEnabled());
+        boolean isPhoneProviderNone = authProperties.getNotifications().getPhone().getProvider() == AuthProperties.Notifications.Phone.Provider.NONE;
+        if (hasPhone && isPhoneProviderNone) {
+            user.setPhoneVerified(true);
+        }
+
+        try {
+            user = userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("User already registered (Email or Phone conflict)");
+        }
+
+        if (hasEmail && !isEmailProviderNone) {
+            String code = UUID.randomUUID().toString();
+            long expirationMinutes = authProperties.getVerification().getEmailLinkExpirationMinutes();
+
+            long displayValue = expirationMinutes;
+            String displayUnit = authProperties.getVerification().getUnitMinutes();
+            if (expirationMinutes >= 60 && expirationMinutes % 60 == 0) {
+                displayValue = expirationMinutes / 60;
+                displayUnit = authProperties.getVerification().getUnitHours();
+            }
+
+            createVerificationCode(user, "EMAIL_VERIFICATION", code, expirationMinutes, ChronoUnit.MINUTES);
+            emailService.sendVerificationEmail(user.getEmail(), profile.getFirstName(), code, displayValue, displayUnit);
+        } else if (hasPhone && !isPhoneProviderNone) {
+            String code = String.valueOf(new Random().nextInt(900000) + 100000);
+            long expirationMinutes = authProperties.getVerification().getPhoneCodeExpirationMinutes();
+            createVerificationCode(user, "PHONE_VERIFICATION", code, expirationMinutes, ChronoUnit.MINUTES);
+            phoneService.sendVerificationCode(user.getPhoneNumber(), code);
         }
 
         log.info("User registered successfully with ID: {}", user.getId());
@@ -123,6 +170,9 @@ public class AuthService {
 
     @Transactional
     public AuthResponse verifyEmail(VerifyEmailRequest request) {
+        // TODO: Update logic for VerificationCode
+        throw new UnsupportedOperationException("Update pending");
+        /*
         var user = userRepository.findByEmail(request.email())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided email."));
 
@@ -138,10 +188,14 @@ public class AuthService {
 
         log.info("Email verified successfully for user: {}", request.email());
         return new AuthResponse("Email verified successfully.");
+        */
     }
 
     @Transactional
     public AuthResponse verifyPhone(VerifyPhoneRequest request) {
+        // TODO: Update logic for VerificationCode
+        throw new UnsupportedOperationException("Update pending");
+        /*
         var user = userRepository.findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided phone number."));
 
@@ -157,10 +211,14 @@ public class AuthService {
 
         log.info("Phone verified successfully for user: {}", request.phoneNumber());
         return new AuthResponse("Phone verified successfully.");
+        */
     }
 
     @Transactional
     public AuthResponse forgotPassword(ForgotPasswordRequest request) {
+        // TODO: Update logic for VerificationCode
+        throw new UnsupportedOperationException("Update pending");
+        /*
         var userOptional = userRepository.findByEmail(request.username())
                 .or(() -> userRepository.findByPhoneNumber(request.username()));
 
@@ -179,17 +237,21 @@ public class AuthService {
         verification.setResetCode(resetCode);
         userRepository.save(user);
 
-        if (user.getEmail() != null && authProperties.getNotifications().getMail().isEnabled()) {
-            emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstName(), resetCode);
-        } else if (user.getPhoneNumber() != null && (authProperties.getNotifications().getSms().isEnabled() || authProperties.getNotifications().getWhatsapp().isEnabled())) {
-            smsService.sendPasswordResetCode(user.getPhoneNumber(), resetCode, authProperties.getNotifications().getWhatsapp().isEnabled(), authProperties.getNotifications().getSms().isEnabled());
+        if (user.getEmail() != null && authProperties.getNotifications().getMail().getProvider() != AuthProperties.Notifications.Mail.Provider.NONE) {
+            emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstName(), resetCode, 1, "hora");
+        } else if (user.getPhoneNumber() != null && authProperties.getNotifications().getPhone().getProvider() != AuthProperties.Notifications.Phone.Provider.NONE) {
+            phoneVerificationService.sendVerificationCode(user.getPhoneNumber(), resetCode);
         }
 
         return new AuthResponse("Password reset code sent.");
+        */
     }
 
     @Transactional
     public AuthResponse resetPassword(ResetPasswordRequest request) {
+        // TODO: Update logic for VerificationCode
+        throw new UnsupportedOperationException("Update pending");
+        /*
         var user = userRepository.findByEmail(request.username())
                 .or(() -> userRepository.findByPhoneNumber(request.username()))
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
@@ -204,10 +266,14 @@ public class AuthService {
         userRepository.save(user);
 
         return new AuthResponse("Password reset successfully.");
+        */
     }
 
     @Transactional
     public AuthResponse updateRole(String username, String newRole) {
+        // TODO: Update logic for Role entity
+        throw new UnsupportedOperationException("Update pending");
+        /*
         var user = userRepository.findByEmail(username)
                 .or(() -> userRepository.findByPhoneNumber(username))
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
@@ -217,5 +283,15 @@ public class AuthService {
         log.info("Role updated for user: {} to {}", username, newRole);
 
         return new AuthResponse("Role updated successfully.");
+        */
+    }
+
+    private void createVerificationCode(User user, String type, String code, long duration, ChronoUnit unit) {
+        VerificationCode vc = new VerificationCode();
+        vc.setUser(user);
+        vc.setType(type);
+        vc.setCode(code);
+        vc.setExpiresAt(Instant.now().plus(duration, unit));
+        verificationCodeRepository.save(vc);
     }
 }

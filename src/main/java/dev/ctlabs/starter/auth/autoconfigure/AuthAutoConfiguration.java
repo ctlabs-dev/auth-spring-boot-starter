@@ -1,7 +1,9 @@
 package dev.ctlabs.starter.auth.autoconfigure;
 
+import dev.ctlabs.starter.auth.domain.model.Profile;
+import dev.ctlabs.starter.auth.domain.model.Role;
 import dev.ctlabs.starter.auth.domain.model.User;
-import dev.ctlabs.starter.auth.domain.model.Verification;
+import dev.ctlabs.starter.auth.domain.repository.RoleRepository;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +40,7 @@ public class AuthAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "ctlabs.auth.admin", name = "enabled", havingValue = "true")
-    public CommandLineRunner createInitialAdmin(UserRepository userRepository, PasswordEncoder passwordEncoder, AuthProperties authProperties) {
+    public CommandLineRunner createInitialAdmin(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, AuthProperties authProperties) {
         return args -> {
             AuthProperties.Admin adminProps = authProperties.getAdmin();
 
@@ -50,16 +52,27 @@ public class AuthAutoConfiguration {
             if (userRepository.findByEmail(adminProps.getEmail()).isEmpty()) {
                 log.info("Creating initial admin user: {}", adminProps.getEmail());
                 User admin = new User();
-                admin.setFirstName(adminProps.getFirstName());
-                admin.setLastName(adminProps.getLastName());
                 admin.setEmail(adminProps.getEmail());
                 admin.setPassword(passwordEncoder.encode(adminProps.getPassword()));
-                admin.setRole(adminProps.getRole());
+                admin.setEmailVerified(true);
+                admin.setPhoneVerified(true);
+                admin.setStatus("active");
 
-                Verification verification = new Verification();
-                verification.setEmailVerified(true);
-                verification.setPhoneVerified(true);
-                admin.setVerification(verification);
+                Profile profile = new Profile();
+                profile.setFirstName(adminProps.getFirstName());
+                profile.setLastName(adminProps.getLastName());
+                profile.setUser(admin);
+                admin.setProfile(profile);
+
+                String roleName = adminProps.getRole();
+                Role role = roleRepository.findByName(roleName)
+                        .orElseGet(() -> {
+                            Role newRole = new Role();
+                            newRole.setName(roleName);
+                            newRole.setDescription("Administrator role");
+                            return roleRepository.save(newRole);
+                        });
+                admin.getRoles().add(role);
 
                 userRepository.save(admin);
                 log.info("Initial admin user created successfully.");
