@@ -34,7 +34,7 @@ class AuthControllerTest {
 
     @Container
     @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg18");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:latest");
 
     private final MockMvc mockMvc;
     private final UserRepository userRepository;
