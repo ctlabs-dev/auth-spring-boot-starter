@@ -3,10 +3,12 @@ package dev.ctlabs.starter.auth.infrastructure.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +29,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.verify;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -49,7 +51,7 @@ class TwilioPhoneVerificationFlowTest {
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg18");
 
-    private WireMockServer wireMockServer;
+    private static WireMockServer wireMockServer;
 
     @Autowired
     private MockMvc mockMvc;
@@ -63,25 +65,29 @@ class TwilioPhoneVerificationFlowTest {
     @Autowired
     private VerificationCodeRepository verificationCodeRepository;
 
-    @BeforeEach
-    void setUp() {
+    @BeforeAll
+    static void startServer() {
         wireMockServer = new WireMockServer(8091);
         wireMockServer.start();
         WireMock.configureFor("localhost", 8091);
     }
 
-    @AfterEach
-    void tearDown() {
+    @AfterAll
+    static void stopServer() {
         wireMockServer.stop();
+    }
+
+    @BeforeEach
+    void reset() {
+        wireMockServer.resetAll();
+        stubFor(WireMock.post(urlEqualTo("/2010-04-01/Accounts/AC_DUMMY_SID/Messages.json"))
+                .willReturn(aResponse()
+                        .withStatus(201)
+                        .withBody("{}")));
     }
 
     @Test
     void registerShouldGenerateCodeWhenPhoneProviderIsTwilio() throws Exception {
-        stubFor(WireMock.post(urlPathMatching("/2010-04-01/Accounts/AC_DUMMY_SID/Messages.json"))
-                .willReturn(aResponse()
-                        .withStatus(201)
-                        .withBody("{}")));
-
         var request = new RegisterRequest(
                 "Twilio", "User", null, "+1234567890", "Password123!"
         );
@@ -101,10 +107,32 @@ class TwilioPhoneVerificationFlowTest {
         assertThat(hasCode).isTrue();
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            verify(postRequestedFor(urlPathMatching("/2010-04-01/Accounts/AC_DUMMY_SID/Messages.json"))
+            verify(postRequestedFor(urlEqualTo("/2010-04-01/Accounts/AC_DUMMY_SID/Messages.json"))
                     .withHeader("Authorization", matching("Basic .*"))
                     .withRequestBody(containing("To=%2B1234567890"))
                     .withRequestBody(containing("Body=Your+verification+code+is")));
         });
+    }
+
+    @Test
+    void loginShouldFailWhenPhoneNotVerified() throws Exception {
+        var registerRequest = new RegisterRequest(
+                "Twilio", "Login", null, "+19998887777", "Password123!"
+        );
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isOk());
+
+        var loginRequest = new LoginRequest(
+                "+19998887777",
+                "Password123!"
+        );
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isUnauthorized());
     }
 }

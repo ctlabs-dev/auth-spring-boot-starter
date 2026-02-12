@@ -3,25 +3,32 @@ package dev.ctlabs.starter.auth.application.service;
 import dev.ctlabs.starter.auth.application.dto.AuthResponse;
 import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
+import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
 import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
+import dev.ctlabs.starter.auth.domain.model.Permission;
 import dev.ctlabs.starter.auth.domain.model.Profile;
+import dev.ctlabs.starter.auth.domain.model.RefreshToken;
 import dev.ctlabs.starter.auth.domain.model.Role;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.model.VerificationCode;
+import dev.ctlabs.starter.auth.domain.repository.RefreshTokenRepository;
 import dev.ctlabs.starter.auth.domain.repository.RoleRepository;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtService;
 import dev.ctlabs.starter.auth.infrastructure.service.EmailService;
 import dev.ctlabs.starter.auth.infrastructure.service.PhoneService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -29,6 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
@@ -39,6 +48,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final VerificationCodeRepository verificationCodeRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
@@ -49,6 +59,7 @@ public class AuthService {
     public AuthService(UserRepository userRepository,
                        RoleRepository roleRepository,
                        VerificationCodeRepository verificationCodeRepository,
+                       RefreshTokenRepository refreshTokenRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        AuthenticationManager authenticationManager,
@@ -58,6 +69,7 @@ public class AuthService {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.verificationCodeRepository = verificationCodeRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.authenticationManager = authenticationManager;
@@ -66,11 +78,15 @@ public class AuthService {
         this.authProperties = authProperties;
     }
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthResponse login(LoginRequest request, HttpServletRequest servletRequest) {
         String identifier = request.username();
 
         if (identifier == null || identifier.isBlank()) {
             throw new IllegalArgumentException("Email or phone number must be provided for login.");
+        }
+
+        if (identifier.contains("@")) {
+            identifier = identifier.trim().toLowerCase();
         }
 
         log.info("Login attempt for user: {}", identifier);
@@ -79,22 +95,40 @@ public class AuthService {
         );
         var userDetails = (UserDetails) authentication.getPrincipal();
         var jwt = jwtService.generateToken(userDetails);
+
+        final String finalIdentifier = identifier;
+        User user = userRepository.findByEmail(finalIdentifier)
+                .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        String rawRefreshToken = UUID.randomUUID().toString();
+        RefreshToken refreshToken = new RefreshToken();
+        refreshToken.setUser(user);
+        refreshToken.setTokenHash(passwordEncoder.encode(rawRefreshToken));
+        refreshToken.setExpiresAt(Instant.now().plus(30, ChronoUnit.DAYS)); // TODO: Parametrizar en AuthProperties
+        refreshToken.setDeviceInfo(servletRequest.getHeader("User-Agent"));
+        refreshToken.setIpAddress(servletRequest.getRemoteAddr());
+        refreshToken = refreshTokenRepository.save(refreshToken);
+
+        String compositeToken = refreshToken.getId().toString() + ":" + rawRefreshToken;
+
         log.info("User authenticated successfully: {}", identifier);
-        return new AuthResponse(jwt);
+        return new AuthResponse(jwt, compositeToken);
     }
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        boolean hasEmail = request.email() != null && !request.email().isBlank();
+        String email = request.email() != null ? request.email().trim().toLowerCase() : null;
+        boolean hasEmail = email != null && !email.isBlank();
         boolean hasPhone = request.phoneNumber() != null && !request.phoneNumber().isBlank();
 
-        log.info("Registration attempt. Email: {}, Phone: {}", request.email(), request.phoneNumber());
+        log.info("Registration attempt. Email: {}, Phone: {}", email, request.phoneNumber());
 
         if (!hasEmail && !hasPhone) {
             throw new IllegalArgumentException("At least one contact method (email or phone) must be provided.");
         }
 
-        if (hasEmail && userRepository.findByEmail(request.email()).isPresent()) {
+        if (hasEmail && userRepository.findByEmail(email).isPresent()) {
             throw new IllegalArgumentException("Email is already registered");
         }
 
@@ -108,7 +142,7 @@ public class AuthService {
         }
 
         User user = new User();
-        user.setEmail(request.email());
+        user.setEmail(email);
         user.setPhoneNumber(request.phoneNumber());
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setStatus("active");
@@ -293,5 +327,90 @@ public class AuthService {
         vc.setCode(code);
         vc.setExpiresAt(Instant.now().plus(duration, unit));
         verificationCodeRepository.save(vc);
+    }
+
+    /**
+     * Changes the status of a user (e.g., "active", "suspended", "banned").
+     * This method is intended to be used by administrative components.
+     */
+    @Transactional
+    public void changeUserStatus(UUID userId, String newStatus) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        user.setStatus(newStatus);
+        userRepository.save(user);
+
+        if (!"active".equalsIgnoreCase(newStatus)) {
+            refreshTokenRepository.deleteByUser_Id(userId);
+            log.info("Revoked refresh tokens for user: {}", userId);
+        }
+        log.info("User status changed. ID: {}, New Status: {}", userId, newStatus);
+    }
+
+    /**
+     * Soft deletes a user by changing their status to 'archived'.
+     * This preserves the user record for referential integrity but prevents login.
+     */
+    @Transactional
+    public void deleteUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        user.setStatus("archived");
+        userRepository.save(user);
+        refreshTokenRepository.deleteByUser_Id(userId);
+        log.info("User soft-deleted (status set to archived). ID: {}", userId);
+    }
+
+    @Transactional
+    public AuthResponse refreshToken(RefreshTokenRequest request) {
+        String compositeToken = request.refreshToken();
+        if (compositeToken == null || !compositeToken.contains(":")) {
+            throw new IllegalArgumentException("Invalid refresh token format");
+        }
+
+        String[] parts = compositeToken.split(":");
+        UUID tokenId = UUID.fromString(parts[0]);
+        String rawToken = parts[1];
+
+        RefreshToken tokenEntity = refreshTokenRepository.findById(tokenId)
+                .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
+
+        if (tokenEntity.getRevokedAt() != null) {
+            throw new IllegalArgumentException("Refresh token has been revoked");
+        }
+
+        if (tokenEntity.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Refresh token expired");
+        }
+
+        if (!passwordEncoder.matches(rawToken, tokenEntity.getTokenHash())) {
+            throw new IllegalArgumentException("Invalid refresh token");
+        }
+
+        User user = tokenEntity.getUser();
+        if (!"active".equalsIgnoreCase(user.getStatus())) {
+            throw new IllegalArgumentException("User is not active");
+        }
+
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        for (Role role : user.getRoles()) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + role.getName()));
+            for (Permission permission : role.getPermissions()) {
+                authorities.add(new SimpleGrantedAuthority(permission.getSlug()));
+            }
+        }
+
+        UserDetails userDetails = new org.springframework.security.core.userdetails.User(
+                user.getEmail() != null ? user.getEmail() : user.getPhoneNumber(),
+                user.getPassword(),
+                true, true, true, true,
+                authorities
+        );
+
+        String newJwt = jwtService.generateToken(userDetails);
+
+        return new AuthResponse(newJwt, null);
     }
 }

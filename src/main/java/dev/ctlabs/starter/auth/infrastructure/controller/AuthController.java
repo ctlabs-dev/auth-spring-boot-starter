@@ -4,8 +4,10 @@ package dev.ctlabs.starter.auth.infrastructure.controller;
 
 import dev.ctlabs.starter.auth.application.dto.AuthResponse;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
+import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.application.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,8 +31,13 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        return ResponseEntity.ok(authService.login(request, servletRequest));
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<AuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
+        return ResponseEntity.ok(authService.refreshToken(request));
     }
 
 //    @PostMapping("/email-verification")
