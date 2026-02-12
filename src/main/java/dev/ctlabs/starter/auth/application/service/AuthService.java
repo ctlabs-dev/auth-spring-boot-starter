@@ -204,48 +204,56 @@ public class AuthService {
 
     @Transactional
     public AuthResponse verifyEmail(VerifyEmailRequest request) {
-        // TODO: Update logic for VerificationCode
-        throw new UnsupportedOperationException("Update pending");
-        /*
-        var user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new IllegalArgumentException("User not found with the provided email."));
-
-        var verification = user.getVerification();
-        if (verification == null || verification.getEmailVerificationCode() == null ||
-                !verification.getEmailVerificationCode().equals(request.code())) {
-            throw new IllegalArgumentException("Invalid or expired email verification code.");
+        String email = request.email();
+        if (email != null) {
+            email = email.trim().toLowerCase();
         }
 
-        verification.setEmailVerified(true);
-        verification.setEmailVerificationCode(null);
-        userRepository.save(user);
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with the provided email."));
 
-        log.info("Email verified successfully for user: {}", request.email());
+        if (user.isEmailVerified()) {
+            return new AuthResponse("Email is already verified.");
+        }
+
+        VerificationCode vc = verificationCodeRepository.findByUser_IdAndTypeAndCode(user.getId(), "EMAIL_VERIFICATION", request.code())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired email verification code."));
+
+        if (vc.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Verification code has expired.");
+        }
+
+        user.setEmailVerified(true);
+        userRepository.save(user);
+        verificationCodeRepository.delete(vc);
+
+        log.info("Email verified successfully for user: {}", email);
         return new AuthResponse("Email verified successfully.");
-        */
     }
 
     @Transactional
     public AuthResponse verifyPhone(VerifyPhoneRequest request) {
-        // TODO: Update logic for VerificationCode
-        throw new UnsupportedOperationException("Update pending");
-        /*
-        var user = userRepository.findByPhoneNumber(request.phoneNumber())
+        User user = userRepository.findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided phone number."));
 
-        var verification = user.getVerification();
-        if (verification == null || verification.getPhoneVerificationCode() == null ||
-                !verification.getPhoneVerificationCode().equals(request.code())) {
-            throw new IllegalArgumentException("Invalid or expired phone verification code.");
+        if (user.isPhoneVerified()) {
+            return new AuthResponse("Phone is already verified.");
         }
 
-        verification.setPhoneVerified(true);
-        verification.setPhoneVerificationCode(null);
+        VerificationCode vc = verificationCodeRepository.findByUser_IdAndTypeAndCode(user.getId(), "PHONE_VERIFICATION", request.code())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired phone verification code."));
+
+        if (vc.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Verification code has expired.");
+        }
+
+        user.setPhoneVerified(true);
         userRepository.save(user);
+        verificationCodeRepository.delete(vc);
 
         log.info("Phone verified successfully for user: {}", request.phoneNumber());
         return new AuthResponse("Phone verified successfully.");
-        */
+
     }
 
     @Transactional
