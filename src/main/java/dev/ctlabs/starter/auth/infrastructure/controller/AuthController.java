@@ -1,11 +1,11 @@
 package dev.ctlabs.starter.auth.infrastructure.controller;
 
-//import dev.ctlabs.starter.auth.application.dto.AuthResponse;
-
 import dev.ctlabs.starter.auth.application.dto.AuthResponse;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
 import dev.ctlabs.starter.auth.application.service.AuthService;
@@ -52,13 +52,13 @@ public class AuthController {
         return ResponseEntity.ok(authService.verifyPhone(request));
     }
 
-//    @PostMapping("/forgot-password")
-//    public ResponseEntity<AuthResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-//        return ResponseEntity.ok(authService.forgotPassword(request));
-//    }
-//
-//    @PostMapping("/reset-password")
-//    public ResponseEntity<AuthResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-//        return ResponseEntity.ok(authService.resetPassword(request));
-//    }
+    @PostMapping("/forgot-password")
+    public ResponseEntity<AuthResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(authService.forgotPassword(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<AuthResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(authService.resetPassword(request));
+    }
 }

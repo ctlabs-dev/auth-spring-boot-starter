@@ -3,8 +3,10 @@ package dev.ctlabs.starter.auth.infrastructure.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
@@ -23,9 +25,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.time.Duration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.containing;
@@ -177,8 +179,8 @@ class BrevoPhoneVerificationFlowTest {
     void verifyPhoneShouldFailWhenCodeIsInvalid() throws Exception {
         var registerRequest = new RegisterRequest("Invalid", "Code", null, "+15559990001", "Password123!");
         mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
 
         var verifyRequest = new VerifyPhoneRequest("+15559990001", "WRONG-CODE");
 
@@ -192,8 +194,8 @@ class BrevoPhoneVerificationFlowTest {
     void verifyPhoneShouldFailWhenCodeIsExpired() throws Exception {
         var registerRequest = new RegisterRequest("Expired", "Code", null, "+15559990002", "Password123!");
         mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
 
         var user = userRepository.findByPhoneNumber("+15559990002").orElseThrow();
         var codeEntity = verificationCodeRepository.findAll().stream()
@@ -226,8 +228,8 @@ class BrevoPhoneVerificationFlowTest {
     void verifyPhoneShouldReturnMessageWhenAlreadyVerified() throws Exception {
         var registerRequest = new RegisterRequest("Already", "Verified", null, "+15559990003", "Password123!");
         mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)));
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms"))
@@ -251,5 +253,81 @@ class BrevoPhoneVerificationFlowTest {
                         .content(objectMapper.writeValueAsString(verifyRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("Phone is already verified."));
+    }
+
+    @Test
+    void forgotPasswordShouldSendSms() throws Exception {
+        var registerRequest = new RegisterRequest("Forgot", "Phone", null, "+15559990004", "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var forgotRequest = new ForgotPasswordRequest("+15559990004");
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(forgotRequest)))
+                .andExpect(status().isOk());
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms"))
+                    .withRequestBody(containing("+15559990004")));
+        });
+    }
+
+    @Test
+    void resetPasswordShouldWorkWithValidCode() throws Exception {
+        var registerRequest = new RegisterRequest("Reset", "Phone", null, "+15559990005", "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var user = userRepository.findByPhoneNumber("+15559990005").orElseThrow();
+        var verificationCode = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(user.getId()) && "PHONE_VERIFICATION".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+        var verifyRequest = new VerifyPhoneRequest("+15559990005", verificationCode.getCode());
+        mockMvc.perform(post("/api/auth/phone-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(verifyRequest)))
+                .andExpect(status().isOk());
+        wireMockServer.resetAll();
+
+        var forgotRequest = new ForgotPasswordRequest("+15559990005");
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(forgotRequest)));
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            stubFor(WireMock.post(urlEqualTo("/transactionalSMS/sms")).willReturn(aResponse().withStatus(201)));
+            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms"))
+                    .withRequestBody(containing("+15559990005")));
+        });
+
+        var userForReset = userRepository.findByPhoneNumber("+15559990005").orElseThrow();
+        var codeEntity = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(userForReset.getId()) && "PASSWORD_RESET".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        var resetRequest = new ResetPasswordRequest("+15559990005", codeEntity.getCode(), "NewPassword123!");
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isOk());
+
+        var loginRequest = new LoginRequest("+15559990005", "NewPassword123!");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk());
+
+        var oldLoginRequest = new LoginRequest("+15559990005", "Password123!");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(oldLoginRequest)))
+                .andExpect(status().isUnauthorized());
     }
 }

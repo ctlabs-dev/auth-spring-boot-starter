@@ -3,8 +3,10 @@ package dev.ctlabs.starter.auth.infrastructure.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
@@ -262,5 +264,72 @@ class BrevoEmailVerificationFlowTest {
                         .content(objectMapper.writeValueAsString(verifyRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.token").value("Email is already verified."));
+    }
+
+    @Test
+    void forgotPasswordShouldSendEmail() throws Exception {
+        var registerRequest = new RegisterRequest("Forgot", "Email", "forgot_email@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var forgotRequest = new ForgotPasswordRequest("forgot_email@test.com");
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(forgotRequest)))
+                .andExpect(status().isOk());
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            verify(postRequestedFor(urlEqualTo("/smtp/email"))
+                    .withRequestBody(containing("forgot_email@test.com"))
+                    .withRequestBody(containing("\"templateId\":2")));
+        });
+    }
+
+    @Test
+    void resetPasswordShouldWorkWithValidCode() throws Exception {
+        var registerRequest = new RegisterRequest("Reset", "Pass", "reset_pass@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var user = userRepository.findByEmail("reset_pass@test.com").orElseThrow();
+        var verificationCode = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(user.getId()) && "EMAIL_VERIFICATION".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+        var verifyRequest = new VerifyEmailRequest("reset_pass@test.com", verificationCode.getCode());
+        mockMvc.perform(post("/api/auth/email-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(verifyRequest)))
+                .andExpect(status().isOk());
+        wireMockServer.resetAll();
+
+
+        var forgotRequest = new ForgotPasswordRequest("reset_pass@test.com");
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(forgotRequest)));
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            stubFor(WireMock.post(urlEqualTo("/smtp/email")).willReturn(aResponse().withStatus(201)));
+            verify(postRequestedFor(urlEqualTo("/smtp/email"))
+                    .withRequestBody(containing("reset_pass@test.com"))
+                    .withRequestBody(containing("\"templateId\":2")));
+        });
+
+        var userForReset = userRepository.findByEmail("reset_pass@test.com").orElseThrow();
+        var codeEntity = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(userForReset.getId()) && "PASSWORD_RESET".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        var resetRequest = new ResetPasswordRequest("reset_pass@test.com", codeEntity.getCode(), "NewPassword123!");
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isOk());
     }
 }

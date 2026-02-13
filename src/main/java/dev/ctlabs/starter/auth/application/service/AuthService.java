@@ -258,57 +258,75 @@ public class AuthService {
 
     @Transactional
     public AuthResponse forgotPassword(ForgotPasswordRequest request) {
-        // TODO: Update logic for VerificationCode
-        throw new UnsupportedOperationException("Update pending");
-        /*
-        var userOptional = userRepository.findByEmail(request.username())
-                .or(() -> userRepository.findByPhoneNumber(request.username()));
-
-        if (userOptional.isEmpty()) {
-            throw new IllegalArgumentException("User not found.");
+        String identifier = request.username();
+        if (identifier != null && identifier.contains("@")) {
+            identifier = identifier.trim().toLowerCase();
         }
 
-        var user = userOptional.get();
-        var verification = user.getVerification();
-        if (verification == null) {
-            verification = new Verification();
-            user.setVerification(verification);
+        final String finalIdentifier = identifier;
+        User user = userRepository.findByEmail(finalIdentifier)
+                .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+        String resetCode;
+        long expirationMinutes;
+        ChronoUnit unit = ChronoUnit.MINUTES;
+
+        if (user.getEmail() != null) {
+            resetCode = UUID.randomUUID().toString();
+            expirationMinutes = authProperties.getVerification().getEmailLinkExpirationMinutes();
+
+            long displayValue = expirationMinutes;
+            String displayUnit = authProperties.getVerification().getUnitMinutes();
+            if (expirationMinutes >= 60 && expirationMinutes % 60 == 0) {
+                displayValue = expirationMinutes / 60;
+                displayUnit = authProperties.getVerification().getUnitHours();
+            }
+
+            if (authProperties.getNotifications().getMail().getProvider() != AuthProperties.Notifications.Mail.Provider.NONE) {
+                emailService.sendPasswordResetEmail(user.getEmail(), user.getProfile().getFirstName(), resetCode, displayValue, displayUnit);
+            }
+        } else {
+            resetCode = String.valueOf(new Random().nextInt(900000) + 100000);
+            expirationMinutes = authProperties.getVerification().getPhoneCodeExpirationMinutes();
+
+            if (authProperties.getNotifications().getPhone().getProvider() != AuthProperties.Notifications.Phone.Provider.NONE) {
+                phoneService.sendVerificationCode(user.getPhoneNumber(), resetCode);
+            }
         }
 
-        String resetCode = user.getEmail() != null ? UUID.randomUUID().toString() : String.valueOf(new Random().nextInt(1000000));
-        verification.setResetCode(resetCode);
-        userRepository.save(user);
-
-        if (user.getEmail() != null && authProperties.getNotifications().getMail().getProvider() != AuthProperties.Notifications.Mail.Provider.NONE) {
-            emailService.sendPasswordResetEmail(user.getEmail(), user.getFirstName(), resetCode, 1, "hora");
-        } else if (user.getPhoneNumber() != null && authProperties.getNotifications().getPhone().getProvider() != AuthProperties.Notifications.Phone.Provider.NONE) {
-            phoneVerificationService.sendVerificationCode(user.getPhoneNumber(), resetCode);
-        }
+        createVerificationCode(user, "PASSWORD_RESET", resetCode, expirationMinutes, unit);
 
         return new AuthResponse("Password reset code sent.");
-        */
     }
 
     @Transactional
     public AuthResponse resetPassword(ResetPasswordRequest request) {
-        // TODO: Update logic for VerificationCode
-        throw new UnsupportedOperationException("Update pending");
-        /*
-        var user = userRepository.findByEmail(request.username())
-                .or(() -> userRepository.findByPhoneNumber(request.username()))
+        String identifier = request.username();
+        if (identifier != null && identifier.contains("@")) {
+            identifier = identifier.trim().toLowerCase();
+        }
+
+        final String finalIdentifier = identifier;
+        User user = userRepository.findByEmail(finalIdentifier)
+                .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
-        if (user.getVerification() == null || user.getVerification().getResetCode() == null ||
-                !user.getVerification().getResetCode().equals(request.code())) {
-            throw new IllegalArgumentException("Invalid or expired reset code.");
+        VerificationCode vc = verificationCodeRepository.findByUser_IdAndTypeAndCode(user.getId(), "PASSWORD_RESET", request.code())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset code."));
+
+        if (vc.getExpiresAt().isBefore(Instant.now())) {
+            throw new IllegalArgumentException("Reset code has expired.");
         }
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));
-        user.getVerification().setResetCode(null);
         userRepository.save(user);
 
+        verificationCodeRepository.delete(vc);
+
+        refreshTokenRepository.deleteByUser_Id(user.getId());
+
         return new AuthResponse("Password reset successfully.");
-        */
     }
 
     @Transactional

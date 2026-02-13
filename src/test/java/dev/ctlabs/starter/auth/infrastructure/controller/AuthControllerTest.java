@@ -2,11 +2,14 @@ package dev.ctlabs.starter.auth.infrastructure.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.ctlabs.starter.auth.application.dto.AuthResponse;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,16 +43,19 @@ class AuthControllerTest {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
+    private final VerificationCodeRepository verificationCodeRepository;
 
     @Autowired
     public AuthControllerTest(MockMvc mockMvc,
                               UserRepository userRepository,
                               PasswordEncoder passwordEncoder,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              VerificationCodeRepository verificationCodeRepository) {
         this.mockMvc = mockMvc;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
+        this.verificationCodeRepository = verificationCodeRepository;
     }
 
     @BeforeEach
@@ -501,6 +507,64 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(refreshRequest)))
                 .andExpect(status().isBadRequest());
+    }
+    // </editor-fold>
+
+    // <editor-fold desc="Password Management Tests">
+    @Test
+    void forgotPasswordShouldGenerateCode() throws Exception {
+        var registerRequest = new RegisterRequest("Forgot", "Test", "forgot@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var forgotRequest = new ForgotPasswordRequest("forgot@test.com");
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(forgotRequest)))
+                .andExpect(status().isOk());
+
+        var user = userRepository.findByEmail("forgot@test.com").orElseThrow();
+        boolean hasCode = verificationCodeRepository.findAll().stream()
+                .anyMatch(vc -> vc.getUser().getId().equals(user.getId()) && "PASSWORD_RESET".equals(vc.getType()));
+        assertThat(hasCode).isTrue();
+    }
+
+    @Test
+    void resetPasswordShouldUpdatePassword() throws Exception {
+        var registerRequest = new RegisterRequest("Reset", "Test", "reset@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var forgotRequest = new ForgotPasswordRequest("reset@test.com");
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(forgotRequest)));
+
+        var user = userRepository.findByEmail("reset@test.com").orElseThrow();
+        var codeEntity = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(user.getId()) && "PASSWORD_RESET".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        var resetRequest = new ResetPasswordRequest("reset@test.com", codeEntity.getCode(), "NewPassword456!");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetRequest)))
+                .andExpect(status().isOk());
+
+        var loginRequest = new LoginRequest("reset@test.com", "NewPassword456!");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk());
+
+        var oldLoginRequest = new LoginRequest("reset@test.com", "Password123!");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(oldLoginRequest)))
+                .andExpect(status().isUnauthorized());
     }
     // </editor-fold>
 }
