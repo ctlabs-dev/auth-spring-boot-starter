@@ -6,6 +6,7 @@ import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.SessionInfo;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
 import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
@@ -15,6 +16,7 @@ import dev.ctlabs.starter.auth.domain.model.RefreshToken;
 import dev.ctlabs.starter.auth.domain.model.Role;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.model.VerificationCode;
+import dev.ctlabs.starter.auth.domain.repository.PermissionRepository;
 import dev.ctlabs.starter.auth.domain.repository.RefreshTokenRepository;
 import dev.ctlabs.starter.auth.domain.repository.RoleRepository;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
@@ -47,6 +49,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final PermissionRepository permissionRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
@@ -59,6 +62,7 @@ public class AuthService {
     public AuthService(UserRepository userRepository,
                        RoleRepository roleRepository,
                        VerificationCodeRepository verificationCodeRepository,
+                       PermissionRepository permissionRepository,
                        RefreshTokenRepository refreshTokenRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
@@ -68,6 +72,7 @@ public class AuthService {
                        AuthProperties authProperties) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.permissionRepository = permissionRepository;
         this.verificationCodeRepository = verificationCodeRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -330,68 +335,9 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResponse updateRole(String username, String newRole) {
-        // TODO: Update logic for Role entity
-        throw new UnsupportedOperationException("Update pending");
-        /*
-        var user = userRepository.findByEmail(username)
-                .or(() -> userRepository.findByPhoneNumber(username))
-                .orElseThrow(() -> new IllegalArgumentException("User not found."));
-
-        user.setRole(newRole);
-        userRepository.save(user);
-        log.info("Role updated for user: {} to {}", username, newRole);
-
-        return new AuthResponse("Role updated successfully.");
-        */
-    }
-
-    private void createVerificationCode(User user, String type, String code, long duration, ChronoUnit unit) {
-        VerificationCode vc = new VerificationCode();
-        vc.setUser(user);
-        vc.setType(type);
-        vc.setCode(code);
-        vc.setExpiresAt(Instant.now().plus(duration, unit));
-        verificationCodeRepository.save(vc);
-    }
-
-    /**
-     * Changes the status of a user (e.g., "active", "suspended", "banned").
-     * This method is intended to be used by administrative components.
-     */
-    @Transactional
-    public void changeUserStatus(UUID userId, String newStatus) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-
-        user.setStatus(newStatus);
-        userRepository.save(user);
-
-        if (!"active".equalsIgnoreCase(newStatus)) {
-            refreshTokenRepository.deleteByUser_Id(userId);
-            log.info("Revoked refresh tokens for user: {}", userId);
-        }
-        log.info("User status changed. ID: {}, New Status: {}", userId, newStatus);
-    }
-
-    /**
-     * Soft deletes a user by changing their status to 'archived'.
-     * This preserves the user record for referential integrity but prevents login.
-     */
-    @Transactional
-    public void deleteUser(UUID userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-
-        user.setStatus("archived");
-        userRepository.save(user);
-        refreshTokenRepository.deleteByUser_Id(userId);
-        log.info("User soft-deleted (status set to archived). ID: {}", userId);
-    }
-
-    @Transactional
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         String compositeToken = request.refreshToken();
+
         if (compositeToken == null || !compositeToken.contains(":")) {
             throw new IllegalArgumentException("Invalid refresh token format");
         }
@@ -438,5 +384,171 @@ public class AuthService {
         String newJwt = jwtService.generateToken(userDetails);
 
         return new AuthResponse(newJwt, null);
+    }
+
+    /**
+     * Changes the status of a user (e.g., "active", "suspended", "banned").
+     * This method is intended to be used by administrative components.
+     */
+    @Transactional
+    public void changeUserStatus(UUID userId, String newStatus) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        user.setStatus(newStatus);
+        userRepository.save(user);
+
+        if (!"active".equalsIgnoreCase(newStatus)) {
+            refreshTokenRepository.deleteByUser_Id(userId);
+            log.info("Revoked refresh tokens for user: {}", userId);
+        }
+        log.info("User status changed. ID: {}, New Status: {}", userId, newStatus);
+    }
+
+    /**
+     * Soft deletes a user by changing their status to 'archived'.
+     * This preserves the user record for referential integrity but prevents login.
+     */
+    @Transactional
+    public void deleteUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        user.setStatus("archived");
+        userRepository.save(user);
+        refreshTokenRepository.deleteByUser_Id(userId);
+        log.info("User soft-deleted (status set to archived). ID: {}", userId);
+    }
+
+    /**
+     * Creates a new role in the system.
+     * Intended for administrative use or initial setup.
+     */
+    @Transactional
+    public void createRole(String roleName, String description) {
+        if (roleRepository.findByName(roleName).isPresent()) {
+            throw new IllegalArgumentException("Role already exists: " + roleName);
+        }
+        Role role = new Role();
+        role.setName(roleName);
+        role.setDescription(description);
+        roleRepository.save(role);
+        log.info("Role created: {}", roleName);
+    }
+
+    /**
+     * Assigns a role to a user.
+     * Intended for administrative use.
+     */
+    @Transactional
+    public void assignRole(UUID userId, String roleName) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
+
+        user.getRoles().add(role);
+        userRepository.save(user);
+        log.info("Role '{}' assigned to user ID: {}", roleName, userId);
+    }
+
+    @Transactional
+    public void removeRole(UUID userId, String roleName) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
+
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
+
+        user.getRoles().remove(role);
+        userRepository.save(user);
+        log.info("Role '{}' removed from user ID: {}", roleName, userId);
+    }
+
+    /**
+     * Creates a new permission in the system.
+     * Intended for administrative use or initial setup.
+     */
+    @Transactional
+    public void createPermission(String slug, String description) {
+        if (permissionRepository.findBySlug(slug).isPresent()) {
+            throw new IllegalArgumentException("Permission already exists: " + slug);
+        }
+        Permission permission = new Permission();
+        permission.setSlug(slug);
+        permission.setDescription(description);
+        permissionRepository.save(permission);
+        log.info("Permission created: {}", slug);
+    }
+
+    @Transactional
+    public void assignPermissionToRole(String roleName, String permissionSlug) {
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
+
+        Permission permission = permissionRepository.findBySlug(permissionSlug)
+                .orElseThrow(() -> new IllegalArgumentException("Permission not found: " + permissionSlug));
+
+        role.getPermissions().add(permission);
+        roleRepository.save(role);
+        log.info("Permission '{}' assigned to role '{}'", permissionSlug, roleName);
+    }
+
+    @Transactional
+    public void removePermissionFromRole(String roleName, String permissionSlug) {
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
+
+        Permission permission = permissionRepository.findBySlug(permissionSlug)
+                .orElseThrow(() -> new IllegalArgumentException("Permission not found: " + permissionSlug));
+
+        role.getPermissions().remove(permission);
+        roleRepository.save(role);
+        log.info("Permission '{}' removed from role '{}'", permissionSlug, roleName);
+    }
+
+    /**
+     * Retrieves all active sessions (refresh tokens) for a specific user.
+     * Useful for showing a "Where you're logged in" list.
+     */
+    @Transactional(readOnly = true)
+    public List<SessionInfo> getActiveSessions(UUID userId) {
+        return refreshTokenRepository.findAllByUser_Id(userId).stream()
+                .filter(token -> token.getRevokedAt() == null && token.getExpiresAt().isAfter(Instant.now()))
+                .map(token -> new SessionInfo(
+                        token.getId(),
+                        token.getDeviceInfo(),
+                        token.getIpAddress(),
+                        token.getCreatedAt(),
+                        token.getExpiresAt()
+                ))
+                .toList();
+    }
+
+    /**
+     * Revokes a specific session (refresh token) by ID.
+     * Useful for a "Log out from this device" button.
+     */
+    @Transactional
+    public void revokeSession(UUID sessionId, UUID userId) {
+        RefreshToken token = refreshTokenRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+
+        if (!token.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("Session does not belong to user");
+        }
+
+        refreshTokenRepository.delete(token);
+        log.info("Session revoked. ID: {}", sessionId);
+    }
+
+    private void createVerificationCode(User user, String type, String code, long duration, ChronoUnit unit) {
+        VerificationCode vc = new VerificationCode();
+        vc.setUser(user);
+        vc.setType(type);
+        vc.setCode(code);
+        vc.setExpiresAt(Instant.now().plus(duration, unit));
+        verificationCodeRepository.save(vc);
     }
 }

@@ -4,9 +4,12 @@ import dev.ctlabs.starter.auth.domain.model.RefreshToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.UUID;
 
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID> {
     void deleteByUser_Id(UUID userId);
+
+    List<RefreshToken> findAllByUser_Id(UUID userId);
 }
