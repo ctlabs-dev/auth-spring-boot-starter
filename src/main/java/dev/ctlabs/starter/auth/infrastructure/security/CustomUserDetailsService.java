@@ -17,6 +17,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Custom implementation of {@link UserDetailsService}.
+ * Loads user details from the database for Spring Security authentication.
+ */
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
@@ -49,7 +53,8 @@ public class CustomUserDetailsService implements UserDetailsService {
         }
 
         boolean isActive = "active".equalsIgnoreCase(user.getStatus());
-        boolean isAccountNonLocked = !"suspended".equalsIgnoreCase(user.getStatus()) && !"banned".equalsIgnoreCase(user.getStatus());
+        boolean isAccountNonLocked =
+                !"suspended".equalsIgnoreCase(user.getStatus()) && !"banned".equalsIgnoreCase(user.getStatus());
 
         List<GrantedAuthority> authorities = new ArrayList<>();
         for (Role role : user.getRoles()) {
@@ -68,7 +73,6 @@ public class CustomUserDetailsService implements UserDetailsService {
                 true,
                 true,
                 isAccountNonLocked,
-                authorities
-        );
+                authorities);
     }
 }

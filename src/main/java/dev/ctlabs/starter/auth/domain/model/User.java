@@ -27,6 +27,10 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * Entity representing a user.
+ * The core authentication entity containing credentials and account status.
+ */
 @Entity
 @Table(name = "auth_users")
 @Getter
@@ -61,8 +65,7 @@ public class User {
     @JoinTable(
             name = "auth_user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "role_id")
-    )
+            inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
 
     @CreatedDate

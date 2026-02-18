@@ -4,6 +4,10 @@ import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
+/**
+ * Validator for the {@link ValidPassword} annotation.
+ * Validates that the password matches the configured regex.
+ */
 public class PasswordConstraintValidator implements ConstraintValidator<ValidPassword, String> {
 
     private final AuthProperties authProperties;
@@ -23,7 +27,8 @@ public class PasswordConstraintValidator implements ConstraintValidator<ValidPas
         }
 
         context.disableDefaultConstraintViolation();
-        context.buildConstraintViolationWithTemplate(authProperties.getPassword().getValidationMessage())
+        context.buildConstraintViolationWithTemplate(
+                        authProperties.getPassword().getValidationMessage())
                 .addConstraintViolation();
         return false;
     }

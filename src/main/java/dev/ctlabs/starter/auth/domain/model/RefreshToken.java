@@ -21,6 +21,10 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Entity representing a refresh token.
+ * Used to obtain new access tokens without re-authenticating.
+ */
 @Entity
 @Table(name = "auth_refresh_tokens")
 @Getter

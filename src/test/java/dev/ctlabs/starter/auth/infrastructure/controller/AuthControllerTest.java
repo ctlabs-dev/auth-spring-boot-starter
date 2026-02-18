@@ -46,11 +46,12 @@ class AuthControllerTest {
     private final VerificationCodeRepository verificationCodeRepository;
 
     @Autowired
-    public AuthControllerTest(MockMvc mockMvc,
-                              UserRepository userRepository,
-                              PasswordEncoder passwordEncoder,
-                              ObjectMapper objectMapper,
-                              VerificationCodeRepository verificationCodeRepository) {
+    public AuthControllerTest(
+            MockMvc mockMvc,
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            ObjectMapper objectMapper,
+            VerificationCodeRepository verificationCodeRepository) {
         this.mockMvc = mockMvc;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -66,13 +67,7 @@ class AuthControllerTest {
     // <editor-fold desc="Registration Tests">
     @Test
     void registerShouldReturnOkWhenValidEmailRequest() throws Exception {
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "juan.perez@test.com",
-                null,
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "juan.perez@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -92,13 +87,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldReturnOkWhenValidPhoneRequest() throws Exception {
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", null, "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -112,13 +101,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldReturnOkWhenValidEmailAndPhoneRequest() throws Exception {
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "juan.perez@test.com",
-                "+59170712345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "juan.perez@test.com", "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -135,13 +118,7 @@ class AuthControllerTest {
         user.setStatus("active");
         userRepository.save(user);
 
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "existing@test.com",
-                null,
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "existing@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -157,13 +134,7 @@ class AuthControllerTest {
         user.setStatus("active");
         userRepository.save(user);
 
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", null, "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -173,13 +144,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldFailWhenNoContactMethodProvided() throws Exception {
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                null,
-                null,
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", null, null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -189,13 +154,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldFailWhenPhoneFormatIsInvalid() throws Exception {
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                null,
-                "12345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", null, "12345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -205,13 +164,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldFailWhenFirstNameIsMissing() throws Exception {
-        var request = new RegisterRequest(
-                null,
-                "Perez",
-                "juan@test.com",
-                null,
-                "Password123!"
-        );
+        var request = new RegisterRequest(null, "Perez", "juan@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -221,13 +174,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldFailWhenPasswordIsTooShort() throws Exception {
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "juan.perez@test.com",
-                null,
-                "short"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "juan.perez@test.com", null, "short");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -243,10 +190,7 @@ class AuthControllerTest {
         user.setStatus("active");
         userRepository.save(user);
 
-        var request = new RegisterRequest(
-                "Juan", "Perez", "MixedCase@Test.com", null, "Password123!"
-        );
-
+        var request = new RegisterRequest("Juan", "Perez", "MixedCase@Test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -258,9 +202,7 @@ class AuthControllerTest {
     // <editor-fold desc="Login Tests">
     @Test
     void loginShouldReturnOkWhenCredentialsAreValid() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Login", "Success", "loginsuccess@test.com", null, "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Login", "Success", "loginsuccess@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
@@ -278,10 +220,7 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenEmailInvalid() throws Exception {
-        var request = new LoginRequest(
-                "unknown@test.com",
-                "Password123!"
-        );
+        var request = new LoginRequest("unknown@test.com", "Password123!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -291,10 +230,7 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenPhoneInvalid() throws Exception {
-        var request = new LoginRequest(
-                "+59100000000",
-                "Password123!"
-        );
+        var request = new LoginRequest("+59100000000", "Password123!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -304,23 +240,14 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenEmailValidButPasswordIncorrect() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Login",
-                "User",
-                "login@test.com",
-                null,
-                "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Login", "User", "login@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
-        var loginRequest = new LoginRequest(
-                "login@test.com",
-                "WrongPassword!"
-        );
+        var loginRequest = new LoginRequest("login@test.com", "WrongPassword!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -330,23 +257,14 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenPhoneValidButPasswordIncorrect() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Login",
-                "User",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Login", "User", null, "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
-        var loginRequest = new LoginRequest(
-                "+59170712345",
-                "WrongPassword!"
-        );
+        var loginRequest = new LoginRequest("+59170712345", "WrongPassword!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -356,9 +274,7 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenUserIsSuspended() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Suspended", "User", "suspended@test.com", null, "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Suspended", "User", "suspended@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
@@ -423,7 +339,9 @@ class AuthControllerTest {
         String responseJson = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         var authResponse = objectMapper.readValue(responseJson, AuthResponse.class);
         var refreshRequest = new RefreshTokenRequest(authResponse.refreshToken());
@@ -467,7 +385,9 @@ class AuthControllerTest {
         String responseJson = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         var authResponse = objectMapper.readValue(responseJson, AuthResponse.class);
         String validToken = authResponse.refreshToken();
@@ -484,7 +404,8 @@ class AuthControllerTest {
 
     @Test
     void refreshTokenShouldFailWhenUserIsSuspended() throws Exception {
-        var registerRequest = new RegisterRequest("Suspend", "Refresh", "suspend_refresh@test.com", null, "Password123!");
+        var registerRequest =
+                new RegisterRequest("Suspend", "Refresh", "suspend_refresh@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(registerRequest)));
@@ -493,7 +414,9 @@ class AuthControllerTest {
         String responseJson = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
-                .andReturn().getResponse().getContentAsString();
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
 
         var authResponse = objectMapper.readValue(responseJson, AuthResponse.class);
 

@@ -4,9 +4,15 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Configuration properties for the Auth Starter.
+ * <p>
+ * Supports configuration for JWT, database migration, notifications (mail/phone),
+ * verification settings, and admin user creation.
+ */
+@ConfigurationProperties(prefix = "ctlabs.auth")
 @Getter
 @Setter
-@ConfigurationProperties(prefix = "ctlabs.auth")
 public class AuthProperties {
 
     private String baseUrl = "/api/auth";
@@ -38,8 +44,7 @@ public class AuthProperties {
             public enum Provider {
                 NONE,
                 SMTP,
-                BREVO,
-                MAILCHIMP
+                BREVO
             }
 
             /**
@@ -47,10 +52,15 @@ public class AuthProperties {
              */
             private Provider provider = Provider.NONE;
 
-            private String fromEmail = "noreply@distribol.com";
-            private String fromName = "Auth Service";
-
+            private Smtp smtp = new Smtp();
             private Brevo brevo = new Brevo();
+
+            @Getter
+            @Setter
+            public static class Smtp {
+                private String fromEmail = "";
+                private String fromName = "";
+            }
 
             @Getter
             @Setter
@@ -59,6 +69,7 @@ public class AuthProperties {
                  * Brevo API Key (xkeysib-...)
                  */
                 private String apiKey;
+
                 private String baseUrl = "https://api.brevo.com/v3";
                 private Integer verificationTemplateId;
                 private Integer passwordResetTemplateId;
@@ -83,6 +94,7 @@ public class AuthProperties {
              * Selects the phone provider. Default is NONE.
              */
             private Provider provider = Provider.NONE;
+
             private Channel channel = Channel.SMS;
             private String fromPhoneNumber; // Generic 'from' number (e.g. +1234567890 or whatsapp:+123...)
 
@@ -123,6 +135,7 @@ public class AuthProperties {
          * If true, attempts to create an admin user at startup if it doesn't exist.
          */
         private boolean enabled = false;
+
         private String email;
         private String password;
         private String firstName = "Admin";
@@ -134,7 +147,8 @@ public class AuthProperties {
     @Setter
     public static class Verification {
         /**
-         * Expiration time for email verification links in minutes. Default: 1440 (24 hours).
+         * Expiration time for email verification links in minutes. Default: 1440 (24
+         * hours).
          */
         private long emailLinkExpirationMinutes = 1440;
 
@@ -161,6 +175,11 @@ public class AuthProperties {
          * Regex for password validation.
          */
         private String validationRegex = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=\\S+$).{8,20}$";
-        private String validationMessage = "Password must be 8-20 characters long, contain at least one digit, one lowercase, one uppercase letter and no whitespace";
+        /**
+         * Validation message to be shown when the password does not meet the regex requirements.
+         */
+        private String validationMessage = """
+                Password must be 8-20 characters long, contain at least one digit, \
+                one lowercase, one uppercase letter and no whitespace""";
     }
 }

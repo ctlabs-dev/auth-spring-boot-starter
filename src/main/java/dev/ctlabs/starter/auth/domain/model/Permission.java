@@ -12,6 +12,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 
+/**
+ * Entity representing a permission.
+ * Permissions are assigned to roles to control access to resources.
+ */
 @Entity
 @Table(name = "auth_permissions")
 @Getter

@@ -8,6 +8,10 @@ import org.springframework.web.client.RestClient;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Mail sender strategy implementation for Brevo (formerly Sendinblue).
+ * Sends emails using Brevo's transactional API.
+ */
 @Slf4j
 public class BrevoMailSenderStrategy implements MailSenderStrategy {
 
@@ -18,7 +22,9 @@ public class BrevoMailSenderStrategy implements MailSenderStrategy {
         this.authProperties = authProperties;
         this.restClient = RestClient.builder()
                 .baseUrl(authProperties.getNotifications().getMail().getBrevo().getBaseUrl())
-                .defaultHeader("api-key", authProperties.getNotifications().getMail().getBrevo().getApiKey())
+                .defaultHeader(
+                        "api-key",
+                        authProperties.getNotifications().getMail().getBrevo().getApiKey())
                 .build();
     }
 
@@ -27,18 +33,18 @@ public class BrevoMailSenderStrategy implements MailSenderStrategy {
         Integer templateId = getTemplateId(type);
 
         if (templateId == null) {
-            log.error("Template ID for email type '{}' is not configured in AuthProperties. Skipping Brevo email to '{}'.", type, to);
+            log.error(
+                    "Template ID for email type '{}' is not configured in AuthProperties. Skipping Brevo email to '{}'.",
+                    type,
+                    to);
             return;
         }
 
-        var request = new BrevoEmailRequest(
-                List.of(new Recipient(name, to)),
-                templateId,
-                variables
-        );
+        var request = new BrevoEmailRequest(List.of(new Recipient(name, to)), templateId, variables);
 
         try {
-            restClient.post()
+            restClient
+                    .post()
                     .uri("/smtp/email")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(request)

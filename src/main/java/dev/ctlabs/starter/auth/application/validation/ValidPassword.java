@@ -11,6 +11,10 @@ import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.PARAMETER;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
+/**
+ * Annotation for validating passwords.
+ * Ensures the password meets the configured complexity requirements.
+ */
 @Documented
 @Constraint(validatedBy = PasswordConstraintValidator.class)
 @Target({FIELD, PARAMETER})

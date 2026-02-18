@@ -25,6 +25,7 @@ import dev.ctlabs.starter.auth.infrastructure.security.JwtService;
 import dev.ctlabs.starter.auth.infrastructure.service.EmailService;
 import dev.ctlabs.starter.auth.infrastructure.service.PhoneService;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -43,8 +44,13 @@ import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
+/**
+ * Service for authentication operations.
+ * Handles login, registration, verification, password reset, and token management.
+ */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -59,30 +65,13 @@ public class AuthService {
     private final PhoneService phoneService;
     private final AuthProperties authProperties;
 
-    public AuthService(UserRepository userRepository,
-                       RoleRepository roleRepository,
-                       VerificationCodeRepository verificationCodeRepository,
-                       PermissionRepository permissionRepository,
-                       RefreshTokenRepository refreshTokenRepository,
-                       PasswordEncoder passwordEncoder,
-                       JwtService jwtService,
-                       AuthenticationManager authenticationManager,
-                       EmailService emailService,
-                       PhoneService phoneService,
-                       AuthProperties authProperties) {
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.permissionRepository = permissionRepository;
-        this.verificationCodeRepository = verificationCodeRepository;
-        this.refreshTokenRepository = refreshTokenRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.authenticationManager = authenticationManager;
-        this.emailService = emailService;
-        this.phoneService = phoneService;
-        this.authProperties = authProperties;
-    }
-
+    /**
+     * Authenticates a user based on login request.
+     *
+     * @param request        The login request containing username and password.
+     * @param servletRequest The HTTP servlet request to extract device info and IP.
+     * @return An {@link AuthResponse} containing the JWT and refresh token.
+     */
     public AuthResponse login(LoginRequest request, HttpServletRequest servletRequest) {
         String identifier = request.username();
 
@@ -96,13 +85,13 @@ public class AuthService {
 
         log.info("Login attempt for user: {}", identifier);
         var authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(identifier, request.password())
-        );
+                new UsernamePasswordAuthenticationToken(identifier, request.password()));
         var userDetails = (UserDetails) authentication.getPrincipal();
         var jwt = jwtService.generateToken(userDetails);
 
         final String finalIdentifier = identifier;
-        User user = userRepository.findByEmail(finalIdentifier)
+        User user = userRepository
+                .findByEmail(finalIdentifier)
                 .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -121,11 +110,18 @@ public class AuthService {
         return new AuthResponse(jwt, compositeToken);
     }
 
+    /**
+     * Registers a new user.
+     *
+     * @param request The registration request containing user details.
+     * @return An {@link AuthResponse} requiring verification.
+     */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         String email = request.email() != null ? request.email().trim().toLowerCase() : null;
         boolean hasEmail = email != null && !email.isBlank();
-        boolean hasPhone = request.phoneNumber() != null && !request.phoneNumber().isBlank();
+        boolean hasPhone =
+                request.phoneNumber() != null && !request.phoneNumber().isBlank();
 
         log.info("Registration attempt. Email: {}, Phone: {}", email, request.phoneNumber());
 
@@ -159,20 +155,23 @@ public class AuthService {
         user.setProfile(profile);
 
         String defaultRoleName = authProperties.getDefaultRole();
-        Role role = roleRepository.findByName(defaultRoleName)
-                .orElseGet(() -> {
-                    Role newRole = new Role();
-                    newRole.setName(defaultRoleName);
-                    return roleRepository.save(newRole);
-                });
+        Role role = roleRepository.findByName(defaultRoleName).orElseGet(() -> {
+            Role newRole = new Role();
+            newRole.setName(defaultRoleName);
+            return roleRepository.save(newRole);
+        });
         user.getRoles().add(role);
 
-        boolean isEmailProviderNone = authProperties.getNotifications().getMail().getProvider() == AuthProperties.Notifications.Mail.Provider.NONE;
+        boolean isEmailProviderNone =
+                authProperties.getNotifications().getMail().getProvider()
+                == AuthProperties.Notifications.Mail.Provider.NONE;
         if (hasEmail && isEmailProviderNone) {
             user.setEmailVerified(true);
         }
 
-        boolean isPhoneProviderNone = authProperties.getNotifications().getPhone().getProvider() == AuthProperties.Notifications.Phone.Provider.NONE;
+        boolean isPhoneProviderNone =
+                authProperties.getNotifications().getPhone().getProvider()
+                == AuthProperties.Notifications.Phone.Provider.NONE;
         if (hasPhone && isPhoneProviderNone) {
             user.setPhoneVerified(true);
         }
@@ -195,7 +194,8 @@ public class AuthService {
             }
 
             createVerificationCode(user, "EMAIL_VERIFICATION", code, expirationMinutes, ChronoUnit.MINUTES);
-            emailService.sendVerificationEmail(user.getEmail(), profile.getFirstName(), code, displayValue, displayUnit);
+            emailService.sendVerificationEmail(
+                    user.getEmail(), profile.getFirstName(), code, displayValue, displayUnit);
         } else if (hasPhone && !isPhoneProviderNone) {
             String code = String.valueOf(new Random().nextInt(900000) + 100000);
             long expirationMinutes = authProperties.getVerification().getPhoneCodeExpirationMinutes();
@@ -207,6 +207,12 @@ public class AuthService {
         return new AuthResponse("User registered. Please verify your account.");
     }
 
+    /**
+     * Verifies a user's email address.
+     *
+     * @param request The email verification request containing email and code.
+     * @return An {@link AuthResponse} confirming verification.
+     */
     @Transactional
     public AuthResponse verifyEmail(VerifyEmailRequest request) {
         String email = request.email();
@@ -214,14 +220,16 @@ public class AuthService {
             email = email.trim().toLowerCase();
         }
 
-        User user = userRepository.findByEmail(email)
+        User user = userRepository
+                .findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided email."));
 
         if (user.isEmailVerified()) {
             return new AuthResponse("Email is already verified.");
         }
 
-        VerificationCode vc = verificationCodeRepository.findByUser_IdAndTypeAndCode(user.getId(), "EMAIL_VERIFICATION", request.code())
+        VerificationCode vc = verificationCodeRepository
+                .findByUser_IdAndTypeAndCode(user.getId(), "EMAIL_VERIFICATION", request.code())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired email verification code."));
 
         if (vc.getExpiresAt().isBefore(Instant.now())) {
@@ -236,16 +244,25 @@ public class AuthService {
         return new AuthResponse("Email verified successfully.");
     }
 
+    /**
+     * Verifies a user's phone number.
+     *
+     * @param request The phone verification request containing phone number and
+     *                code.
+     * @return An {@link AuthResponse} confirming verification.
+     */
     @Transactional
     public AuthResponse verifyPhone(VerifyPhoneRequest request) {
-        User user = userRepository.findByPhoneNumber(request.phoneNumber())
+        User user = userRepository
+                .findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided phone number."));
 
         if (user.isPhoneVerified()) {
             return new AuthResponse("Phone is already verified.");
         }
 
-        VerificationCode vc = verificationCodeRepository.findByUser_IdAndTypeAndCode(user.getId(), "PHONE_VERIFICATION", request.code())
+        VerificationCode vc = verificationCodeRepository
+                .findByUser_IdAndTypeAndCode(user.getId(), "PHONE_VERIFICATION", request.code())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired phone verification code."));
 
         if (vc.getExpiresAt().isBefore(Instant.now())) {
@@ -258,9 +275,14 @@ public class AuthService {
 
         log.info("Phone verified successfully for user: {}", request.phoneNumber());
         return new AuthResponse("Phone verified successfully.");
-
     }
 
+    /**
+     * Initiates the forgot password process.
+     *
+     * @param request The forgot password request containing the username.
+     * @return An {@link AuthResponse} indicating the code has been sent.
+     */
     @Transactional
     public AuthResponse forgotPassword(ForgotPasswordRequest request) {
         String identifier = request.username();
@@ -269,7 +291,8 @@ public class AuthService {
         }
 
         final String finalIdentifier = identifier;
-        User user = userRepository.findByEmail(finalIdentifier)
+        User user = userRepository
+                .findByEmail(finalIdentifier)
                 .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
@@ -288,14 +311,17 @@ public class AuthService {
                 displayUnit = authProperties.getVerification().getUnitHours();
             }
 
-            if (authProperties.getNotifications().getMail().getProvider() != AuthProperties.Notifications.Mail.Provider.NONE) {
-                emailService.sendPasswordResetEmail(user.getEmail(), user.getProfile().getFirstName(), resetCode, displayValue, displayUnit);
+            if (authProperties.getNotifications().getMail().getProvider()
+                != AuthProperties.Notifications.Mail.Provider.NONE) {
+                emailService.sendPasswordResetEmail(
+                        user.getEmail(), user.getProfile().getFirstName(), resetCode, displayValue, displayUnit);
             }
         } else {
             resetCode = String.valueOf(new Random().nextInt(900000) + 100000);
             expirationMinutes = authProperties.getVerification().getPhoneCodeExpirationMinutes();
 
-            if (authProperties.getNotifications().getPhone().getProvider() != AuthProperties.Notifications.Phone.Provider.NONE) {
+            if (authProperties.getNotifications().getPhone().getProvider()
+                != AuthProperties.Notifications.Phone.Provider.NONE) {
                 phoneService.sendVerificationCode(user.getPhoneNumber(), resetCode);
             }
         }
@@ -305,6 +331,13 @@ public class AuthService {
         return new AuthResponse("Password reset code sent.");
     }
 
+    /**
+     * Resets the user's password.
+     *
+     * @param request The reset password request containing username, code, and new
+     *                password.
+     * @return An {@link AuthResponse} confirming the password reset.
+     */
     @Transactional
     public AuthResponse resetPassword(ResetPasswordRequest request) {
         String identifier = request.username();
@@ -313,11 +346,13 @@ public class AuthService {
         }
 
         final String finalIdentifier = identifier;
-        User user = userRepository.findByEmail(finalIdentifier)
+        User user = userRepository
+                .findByEmail(finalIdentifier)
                 .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
-        VerificationCode vc = verificationCodeRepository.findByUser_IdAndTypeAndCode(user.getId(), "PASSWORD_RESET", request.code())
+        VerificationCode vc = verificationCodeRepository
+                .findByUser_IdAndTypeAndCode(user.getId(), "PASSWORD_RESET", request.code())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired reset code."));
 
         if (vc.getExpiresAt().isBefore(Instant.now())) {
@@ -334,6 +369,12 @@ public class AuthService {
         return new AuthResponse("Password reset successfully.");
     }
 
+    /**
+     * Refreshes the access token using a refresh token.
+     *
+     * @param request The refresh token request.
+     * @return An {@link AuthResponse} containing the new access token.
+     */
     @Transactional
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         String compositeToken = request.refreshToken();
@@ -346,7 +387,8 @@ public class AuthService {
         UUID tokenId = UUID.fromString(parts[0]);
         String rawToken = parts[1];
 
-        RefreshToken tokenEntity = refreshTokenRepository.findById(tokenId)
+        RefreshToken tokenEntity = refreshTokenRepository
+                .findById(tokenId)
                 .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
 
         if (tokenEntity.getRevokedAt() != null) {
@@ -377,9 +419,11 @@ public class AuthService {
         UserDetails userDetails = new org.springframework.security.core.userdetails.User(
                 user.getEmail() != null ? user.getEmail() : user.getPhoneNumber(),
                 user.getPassword(),
-                true, true, true, true,
-                authorities
-        );
+                true,
+                true,
+                true,
+                true,
+                authorities);
 
         String newJwt = jwtService.generateToken(userDetails);
 
@@ -392,7 +436,8 @@ public class AuthService {
      */
     @Transactional
     public void changeUserStatus(UUID userId, String newStatus) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
 
         user.setStatus(newStatus);
@@ -411,7 +456,8 @@ public class AuthService {
      */
     @Transactional
     public void deleteUser(UUID userId) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
 
         user.setStatus("archived");
@@ -423,6 +469,9 @@ public class AuthService {
     /**
      * Creates a new role in the system.
      * Intended for administrative use or initial setup.
+     *
+     * @param roleName    The name of the role.
+     * @param description The description of the role.
      */
     @Transactional
     public void createRole(String roleName, String description) {
@@ -439,13 +488,18 @@ public class AuthService {
     /**
      * Assigns a role to a user.
      * Intended for administrative use.
+     *
+     * @param userId   The ID of the user.
+     * @param roleName The name of the role to assign.
      */
     @Transactional
     public void assignRole(UUID userId, String roleName) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
 
-        Role role = roleRepository.findByName(roleName)
+        Role role = roleRepository
+                .findByName(roleName)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
 
         user.getRoles().add(role);
@@ -453,12 +507,21 @@ public class AuthService {
         log.info("Role '{}' assigned to user ID: {}", roleName, userId);
     }
 
+    /**
+     * Removes a role from a user.
+     * Intended for administrative use.
+     *
+     * @param userId   The ID of the user.
+     * @param roleName The name of the role to remove.
+     */
     @Transactional
     public void removeRole(UUID userId, String roleName) {
-        User user = userRepository.findById(userId)
+        User user = userRepository
+                .findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
 
-        Role role = roleRepository.findByName(roleName)
+        Role role = roleRepository
+                .findByName(roleName)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
 
         user.getRoles().remove(role);
@@ -469,6 +532,9 @@ public class AuthService {
     /**
      * Creates a new permission in the system.
      * Intended for administrative use or initial setup.
+     *
+     * @param slug        The unique slug for the permission.
+     * @param description The description of the permission.
      */
     @Transactional
     public void createPermission(String slug, String description) {
@@ -482,12 +548,21 @@ public class AuthService {
         log.info("Permission created: {}", slug);
     }
 
+    /**
+     * Assigns a permission to a role.
+     * Intended for administrative use.
+     *
+     * @param roleName       The name of the role.
+     * @param permissionSlug The slug of the permission.
+     */
     @Transactional
     public void assignPermissionToRole(String roleName, String permissionSlug) {
-        Role role = roleRepository.findByName(roleName)
+        Role role = roleRepository
+                .findByName(roleName)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
 
-        Permission permission = permissionRepository.findBySlug(permissionSlug)
+        Permission permission = permissionRepository
+                .findBySlug(permissionSlug)
                 .orElseThrow(() -> new IllegalArgumentException("Permission not found: " + permissionSlug));
 
         role.getPermissions().add(permission);
@@ -495,12 +570,21 @@ public class AuthService {
         log.info("Permission '{}' assigned to role '{}'", permissionSlug, roleName);
     }
 
+    /**
+     * Removes a permission from a role.
+     * Intended for administrative use.
+     *
+     * @param roleName       The name of the role.
+     * @param permissionSlug The slug of the permission.
+     */
     @Transactional
     public void removePermissionFromRole(String roleName, String permissionSlug) {
-        Role role = roleRepository.findByName(roleName)
+        Role role = roleRepository
+                .findByName(roleName)
                 .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
 
-        Permission permission = permissionRepository.findBySlug(permissionSlug)
+        Permission permission = permissionRepository
+                .findBySlug(permissionSlug)
                 .orElseThrow(() -> new IllegalArgumentException("Permission not found: " + permissionSlug));
 
         role.getPermissions().remove(permission);
@@ -511,28 +595,35 @@ public class AuthService {
     /**
      * Retrieves all active sessions (refresh tokens) for a specific user.
      * Useful for showing a "Where you're logged in" list.
+     *
+     * @param userId The ID of the user.
+     * @return A list of active session information.
      */
     @Transactional(readOnly = true)
     public List<SessionInfo> getActiveSessions(UUID userId) {
         return refreshTokenRepository.findAllByUser_Id(userId).stream()
-                .filter(token -> token.getRevokedAt() == null && token.getExpiresAt().isAfter(Instant.now()))
+                .filter(token ->
+                        token.getRevokedAt() == null && token.getExpiresAt().isAfter(Instant.now()))
                 .map(token -> new SessionInfo(
                         token.getId(),
                         token.getDeviceInfo(),
                         token.getIpAddress(),
                         token.getCreatedAt(),
-                        token.getExpiresAt()
-                ))
+                        token.getExpiresAt()))
                 .toList();
     }
 
     /**
      * Revokes a specific session (refresh token) by ID.
      * Useful for a "Log out from this device" button.
+     *
+     * @param sessionId The ID of the session to revoke.
+     * @param userId    The ID of the user who owns the session.
      */
     @Transactional
     public void revokeSession(UUID sessionId, UUID userId) {
-        RefreshToken token = refreshTokenRepository.findById(sessionId)
+        RefreshToken token = refreshTokenRepository
+                .findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("Session not found"));
 
         if (!token.getUser().getId().equals(userId)) {

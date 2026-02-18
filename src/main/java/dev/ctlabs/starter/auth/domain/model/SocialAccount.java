@@ -21,6 +21,10 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Entity representing a social account linked to a user.
+ * Stores provider information for OAuth2/OIDC logins.
+ */
 @Entity
 @Table(name = "auth_social_accounts")
 @Getter

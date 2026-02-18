@@ -10,7 +10,6 @@ import java.util.Optional;
  * Repository for managing {@link Permission} entities.
  * <p>
  * Provides methods for CRUD operations and finding permissions by slug.
- * </p>
  */
 @Repository
 public interface PermissionRepository extends JpaRepository<Permission, Integer> {

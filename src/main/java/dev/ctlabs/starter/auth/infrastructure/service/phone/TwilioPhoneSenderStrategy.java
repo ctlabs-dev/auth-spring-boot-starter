@@ -10,6 +10,10 @@ import org.springframework.web.client.RestClient;
 import java.util.Base64;
 
 @Slf4j
+/**
+ * Phone sender strategy implementation for Twilio.
+ * Sends SMS or WhatsApp messages using Twilio's API.
+ */
 public class TwilioPhoneSenderStrategy implements PhoneSenderStrategy {
 
     private final AuthProperties authProperties;
@@ -17,13 +21,17 @@ public class TwilioPhoneSenderStrategy implements PhoneSenderStrategy {
 
     public TwilioPhoneSenderStrategy(AuthProperties authProperties) {
         this.authProperties = authProperties;
-        String accountSid = authProperties.getNotifications().getPhone().getTwilio().getAccountSid();
-        String authToken = authProperties.getNotifications().getPhone().getTwilio().getAuthToken();
+        String accountSid =
+                authProperties.getNotifications().getPhone().getTwilio().getAccountSid();
+        String authToken =
+                authProperties.getNotifications().getPhone().getTwilio().getAuthToken();
 
         String basicAuth = Base64.getEncoder().encodeToString((accountSid + ":" + authToken).getBytes());
 
         this.restClient = RestClient.builder()
-                .baseUrl(authProperties.getNotifications().getPhone().getTwilio().getBaseUrl() + "/2010-04-01/Accounts/" + accountSid)
+                .baseUrl(
+                        authProperties.getNotifications().getPhone().getTwilio().getBaseUrl() + "/2010-04-01/Accounts/"
+                        + accountSid)
                 .defaultHeader("Authorization", "Basic " + basicAuth)
                 .build();
     }
@@ -34,12 +42,17 @@ public class TwilioPhoneSenderStrategy implements PhoneSenderStrategy {
         String from = phoneConfig.getFromPhoneNumber();
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add("To", phoneConfig.getChannel() == AuthProperties.Notifications.Phone.Channel.WHATSAPP ? "whatsapp:" + to : to);
+        formData.add(
+                "To",
+                phoneConfig.getChannel() == AuthProperties.Notifications.Phone.Channel.WHATSAPP
+                        ? "whatsapp:" + to
+                        : to);
         formData.add("From", from);
         formData.add("Body", message);
 
         try {
-            restClient.post()
+            restClient
+                    .post()
                     .uri("/Messages.json")
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(formData)

@@ -5,6 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
+/**
+ * Phone sender strategy implementation for Brevo (formerly Sendinblue).
+ * Sends SMS using Brevo's transactional SMS API.
+ */
 @Slf4j
 public class BrevoPhoneSenderStrategy implements PhoneSenderStrategy {
 
@@ -15,7 +19,9 @@ public class BrevoPhoneSenderStrategy implements PhoneSenderStrategy {
         this.authProperties = authProperties;
         this.restClient = RestClient.builder()
                 .baseUrl(authProperties.getNotifications().getPhone().getBrevo().getBaseUrl())
-                .defaultHeader("api-key", authProperties.getNotifications().getPhone().getBrevo().getApiKey())
+                .defaultHeader(
+                        "api-key",
+                        authProperties.getNotifications().getPhone().getBrevo().getApiKey())
                 .build();
     }
 
@@ -23,14 +29,11 @@ public class BrevoPhoneSenderStrategy implements PhoneSenderStrategy {
     public void send(String to, String message) {
         var phoneConfig = authProperties.getNotifications().getPhone();
 
-        var request = new BrevoSmsRequest(
-                phoneConfig.getBrevo().getSenderName(),
-                to,
-                message
-        );
+        var request = new BrevoSmsRequest(phoneConfig.getBrevo().getSenderName(), to, message);
 
         try {
-            restClient.post()
+            restClient
+                    .post()
                     .uri("/transactionalSMS/sms")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(request)

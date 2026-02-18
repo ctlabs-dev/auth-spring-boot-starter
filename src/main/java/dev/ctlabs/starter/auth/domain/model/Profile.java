@@ -25,6 +25,10 @@ import java.util.UUID;
 
 import static org.hibernate.type.SqlTypes.JSON;
 
+/**
+ * Entity representing a user's profile.
+ * Contains personal information separate from authentication data.
+ */
 @Entity
 @Table(name = "auth_profiles")
 @Getter

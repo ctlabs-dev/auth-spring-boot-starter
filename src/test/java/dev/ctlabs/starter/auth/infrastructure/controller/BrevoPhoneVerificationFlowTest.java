@@ -1,15 +1,22 @@
 package dev.ctlabs.starter.auth.infrastructure.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
-import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.LoginRequest;
-import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
-import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
-import dev.ctlabs.starter.auth.domain.repository.UserRepository;
-import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.containing;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.verify;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,28 +32,24 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.containing;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.verify;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.LoginRequest;
+import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
+import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 
-@SpringBootTest(properties = {
-        "ctlabs.auth.notifications.phone.provider=BREVO",
-        "ctlabs.auth.notifications.phone.brevo.api-key=dummy-api-key",
-        "ctlabs.auth.notifications.phone.brevo.base-url=http://localhost:8090"
-})
+@SpringBootTest(
+        properties = {
+            "ctlabs.auth.notifications.phone.provider=BREVO",
+            "ctlabs.auth.notifications.phone.brevo.api-key=dummy-api-key",
+            "ctlabs.auth.notifications.phone.brevo.base-url=http://localhost:8090"
+        })
 @AutoConfigureMockMvc
 @Transactional
 @Testcontainers
@@ -86,16 +89,12 @@ class BrevoPhoneVerificationFlowTest {
     void reset() {
         wireMockServer.resetAll();
         stubFor(WireMock.post(urlEqualTo("/transactionalSMS/sms"))
-                .willReturn(aResponse()
-                        .withStatus(201)
-                        .withBody("{}")));
+                .willReturn(aResponse().withStatus(201).withBody("{}")));
     }
 
     @Test
     void registerShouldGenerateCodeWhenPhoneProviderIsBrevo() throws Exception {
-        var request = new RegisterRequest(
-                "BrevoPhone", "User", null, "+15551234567", "Password123!"
-        );
+        var request = new RegisterRequest("BrevoPhone", "User", null, "+15551234567", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -121,19 +120,14 @@ class BrevoPhoneVerificationFlowTest {
 
     @Test
     void loginShouldFailWhenPhoneNotVerified() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Brevo", "Login", null, "+15558887777", "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Brevo", "Login", null, "+15558887777", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
-        var loginRequest = new LoginRequest(
-                "+15558887777",
-                "Password123!"
-        );
+        var loginRequest = new LoginRequest("+15558887777", "Password123!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -232,8 +226,7 @@ class BrevoPhoneVerificationFlowTest {
                 .content(objectMapper.writeValueAsString(registerRequest)));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms"))
-                    .withRequestBody(containing("+15559990003")));
+            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms")).withRequestBody(containing("+15559990003")));
         });
 
         var user = userRepository.findByPhoneNumber("+15559990003").orElseThrow();
@@ -270,8 +263,7 @@ class BrevoPhoneVerificationFlowTest {
                 .andExpect(status().isOk());
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms"))
-                    .withRequestBody(containing("+15559990004")));
+            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms")).withRequestBody(containing("+15559990004")));
         });
     }
 
@@ -300,14 +292,15 @@ class BrevoPhoneVerificationFlowTest {
                 .content(objectMapper.writeValueAsString(forgotRequest)));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            stubFor(WireMock.post(urlEqualTo("/transactionalSMS/sms")).willReturn(aResponse().withStatus(201)));
-            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms"))
-                    .withRequestBody(containing("+15559990005")));
+            stubFor(WireMock.post(urlEqualTo("/transactionalSMS/sms"))
+                    .willReturn(aResponse().withStatus(201)));
+            verify(postRequestedFor(urlEqualTo("/transactionalSMS/sms")).withRequestBody(containing("+15559990005")));
         });
 
         var userForReset = userRepository.findByPhoneNumber("+15559990005").orElseThrow();
         var codeEntity = verificationCodeRepository.findAll().stream()
-                .filter(vc -> vc.getUser().getId().equals(userForReset.getId()) && "PASSWORD_RESET".equals(vc.getType()))
+                .filter(vc ->
+                        vc.getUser().getId().equals(userForReset.getId()) && "PASSWORD_RESET".equals(vc.getType()))
                 .findFirst()
                 .orElseThrow();
 

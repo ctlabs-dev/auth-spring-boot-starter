@@ -21,6 +21,10 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Entity representing a verification code.
+ * Used for email verification, phone verification, and password resets.
+ */
 @Entity
 @Table(name = "auth_verification_codes")
 @Getter

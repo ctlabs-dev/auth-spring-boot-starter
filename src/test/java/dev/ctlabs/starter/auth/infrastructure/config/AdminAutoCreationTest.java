@@ -12,12 +12,13 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest(properties = {
-        "ctlabs.auth.admin.enabled=true",
-        "ctlabs.auth.admin.email=superadmin@ctlabs.dev",
-        "ctlabs.auth.admin.password=SuperSecret123!",
-        "ctlabs.auth.admin.role=ROLE_SUPER_ADMIN"
-})
+@SpringBootTest(
+        properties = {
+                "ctlabs.auth.admin.enabled=true",
+                "ctlabs.auth.admin.email=superadmin@ctlabs.dev",
+                "ctlabs.auth.admin.password=SuperSecret123!",
+                "ctlabs.auth.admin.role=ROLE_SUPER_ADMIN"
+        })
 @Transactional
 @Testcontainers
 class AdminAutoCreationTest {
@@ -36,9 +37,7 @@ class AdminAutoCreationTest {
         assertThat(adminOptional).isPresent();
         var admin = adminOptional.get();
 
-        assertThat(admin.getRoles())
-                .extracting("name")
-                .contains("ROLE_SUPER_ADMIN");
+        assertThat(admin.getRoles()).extracting("name").contains("ROLE_SUPER_ADMIN");
 
         assertThat(admin.getStatus()).isEqualTo("active");
     }

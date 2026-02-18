@@ -1,15 +1,22 @@
 package dev.ctlabs.starter.auth.infrastructure.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
-import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.LoginRequest;
-import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
-import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
-import dev.ctlabs.starter.auth.domain.repository.UserRepository;
-import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.containing;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.verify;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,30 +32,26 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.containing;
-import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.verify;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.LoginRequest;
+import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
+import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 
-@SpringBootTest(properties = {
-        "ctlabs.auth.notifications.mail.provider=BREVO",
-        "ctlabs.auth.notifications.mail.brevo.api-key=dummy-api-key",
-        "ctlabs.auth.notifications.mail.brevo.verification-template-id=1",
-        "ctlabs.auth.notifications.mail.brevo.password-reset-template-id=2",
-        "ctlabs.auth.notifications.mail.brevo.base-url=http://localhost:8089"
-})
+@SpringBootTest(
+        properties = {
+            "ctlabs.auth.notifications.mail.provider=BREVO",
+            "ctlabs.auth.notifications.mail.brevo.api-key=dummy-api-key",
+            "ctlabs.auth.notifications.mail.brevo.verification-template-id=1",
+            "ctlabs.auth.notifications.mail.brevo.password-reset-template-id=2",
+            "ctlabs.auth.notifications.mail.brevo.base-url=http://localhost:8089"
+        })
 @AutoConfigureMockMvc
 @Transactional
 @Testcontainers
@@ -96,9 +99,7 @@ class BrevoEmailVerificationFlowTest {
 
     @Test
     void registerShouldGenerateCodeWhenProviderIsBrevo() throws Exception {
-        var request = new RegisterRequest(
-                "Brevo", "User", "brevo@test.com", null, "Password123!"
-        );
+        var request = new RegisterRequest("Brevo", "User", "brevo@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -124,9 +125,7 @@ class BrevoEmailVerificationFlowTest {
 
     @Test
     void loginShouldFailWhenEmailNotVerified() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Brevo", "Login", "brevo_login@test.com", null, "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Brevo", "Login", "brevo_login@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -145,9 +144,7 @@ class BrevoEmailVerificationFlowTest {
 
     @Test
     void verifyEmailShouldWorkWithValidCode() throws Exception {
-        var registerRequest = new RegisterRequest(
-                "Verify", "Brevo", "verify_brevo@test.com", null, "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Verify", "Brevo", "verify_brevo@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -237,14 +234,14 @@ class BrevoEmailVerificationFlowTest {
 
     @Test
     void verifyEmailShouldReturnMessageWhenAlreadyVerified() throws Exception {
-        var registerRequest = new RegisterRequest("Already", "Verified", "already_brevo@test.com", null, "Password123!");
+        var registerRequest =
+                new RegisterRequest("Already", "Verified", "already_brevo@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(registerRequest)));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            verify(postRequestedFor(urlEqualTo("/smtp/email"))
-                    .withRequestBody(containing("already_brevo@test.com")));
+            verify(postRequestedFor(urlEqualTo("/smtp/email")).withRequestBody(containing("already_brevo@test.com")));
         });
 
         var user = userRepository.findByEmail("already_brevo@test.com").orElseThrow();
@@ -306,14 +303,14 @@ class BrevoEmailVerificationFlowTest {
                 .andExpect(status().isOk());
         wireMockServer.resetAll();
 
-
         var forgotRequest = new ForgotPasswordRequest("reset_pass@test.com");
         mockMvc.perform(post("/api/auth/forgot-password")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(forgotRequest)));
 
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            stubFor(WireMock.post(urlEqualTo("/smtp/email")).willReturn(aResponse().withStatus(201)));
+            stubFor(WireMock.post(urlEqualTo("/smtp/email"))
+                    .willReturn(aResponse().withStatus(201)));
             verify(postRequestedFor(urlEqualTo("/smtp/email"))
                     .withRequestBody(containing("reset_pass@test.com"))
                     .withRequestBody(containing("\"templateId\":2")));
@@ -321,7 +318,8 @@ class BrevoEmailVerificationFlowTest {
 
         var userForReset = userRepository.findByEmail("reset_pass@test.com").orElseThrow();
         var codeEntity = verificationCodeRepository.findAll().stream()
-                .filter(vc -> vc.getUser().getId().equals(userForReset.getId()) && "PASSWORD_RESET".equals(vc.getType()))
+                .filter(vc ->
+                        vc.getUser().getId().equals(userForReset.getId()) && "PASSWORD_RESET".equals(vc.getType()))
                 .findFirst()
                 .orElseThrow();
 

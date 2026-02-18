@@ -22,6 +22,10 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+/**
+ * Auto-configuration for the Auth Starter.
+ * Configures JPA, security, and initial administrative user.
+ */
 @AutoConfiguration(after = {DataSourceAutoConfiguration.class, HibernateJpaAutoConfiguration.class})
 @EnableConfigurationProperties(AuthProperties.class)
 @ComponentScan(basePackages = "dev.ctlabs.starter.auth")
@@ -32,15 +36,33 @@ public class AuthAutoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(AuthAutoConfiguration.class);
 
+    /**
+     * Bean that provides a password encoder.
+     *
+     * @return A BCryptPasswordEncoder instance.
+     */
     @Bean
     @ConditionalOnMissingBean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Creates an initial admin user if configured.
+     *
+     * @param userRepository  The user repository.
+     * @param roleRepository  The role repository.
+     * @param passwordEncoder The password encoder.
+     * @param authProperties  The authentication properties.
+     * @return A CommandLineRunner that creates the admin user.
+     */
     @Bean
     @ConditionalOnProperty(prefix = "ctlabs.auth.admin", name = "enabled", havingValue = "true")
-    public CommandLineRunner createInitialAdmin(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, AuthProperties authProperties) {
+    public CommandLineRunner createInitialAdmin(
+            UserRepository userRepository,
+            RoleRepository roleRepository,
+            PasswordEncoder passwordEncoder,
+            AuthProperties authProperties) {
         return args -> {
             AuthProperties.Admin adminProps = authProperties.getAdmin();
 
@@ -65,13 +87,12 @@ public class AuthAutoConfiguration {
                 admin.setProfile(profile);
 
                 String roleName = adminProps.getRole();
-                Role role = roleRepository.findByName(roleName)
-                        .orElseGet(() -> {
-                            Role newRole = new Role();
-                            newRole.setName(roleName);
-                            newRole.setDescription("Administrator role");
-                            return roleRepository.save(newRole);
-                        });
+                Role role = roleRepository.findByName(roleName).orElseGet(() -> {
+                    Role newRole = new Role();
+                    newRole.setName(roleName);
+                    newRole.setDescription("Administrator role");
+                    return roleRepository.save(newRole);
+                });
                 admin.getRoles().add(role);
 
                 userRepository.save(admin);

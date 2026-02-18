@@ -1,6 +1,5 @@
 package dev.ctlabs.starter.auth.infrastructure.config;
 
-
 import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +19,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+/**
+ * Security configuration for the application.
+ * Configures JWT authentication, session management, and access control.
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -33,19 +36,29 @@ public class SecurityConfig {
         this.userDetailsService = userDetailsService;
     }
 
+    /**
+     * Configures the security filter chain.
+     *
+     * @param http                   The HttpSecurity to configure.
+     * @param authenticationProvider The authentication provider.
+     * @param authProperties         The authentication properties.
+     * @return The configured {@link SecurityFilterChain}.
+     * @throws Exception If an error occurs during configuration.
+     */
     @Bean
     @Order(1)
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationProvider authenticationProvider, AuthProperties authProperties) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http, AuthenticationProvider authenticationProvider, AuthProperties authProperties)
+            throws Exception {
         String authBaseUrl = authProperties.getBaseUrl();
         String authPath = "%s%s".formatted(authBaseUrl, "/**");
-        http
-                .securityMatcher(authPath)
+        http.securityMatcher(authPath)
                 .csrf(AbstractHttpConfigurer::disable)
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(authPath, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error")
+                .authorizeHttpRequests(auth -> auth.requestMatchers(
+                                authPath, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error")
                         .permitAll()
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest()
+                        .authenticated())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

@@ -14,6 +14,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * Service for JWT (JSON Web Token) operations.
+ * Handles token generation, validation, and claim extraction.
+ */
 @Service
 public class JwtService {
 
@@ -23,6 +27,12 @@ public class JwtService {
         this.authProperties = authProperties;
     }
 
+    /**
+     * Extracts the username (subject) from a JWT token.
+     *
+     * @param token The JWT token.
+     * @return The username.
+     */
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
@@ -32,20 +42,41 @@ public class JwtService {
         return claimsResolver.apply(claims);
     }
 
+    /**
+     * Generates a JWT token for a user with default claims.
+     *
+     * @param userDetails The user details.
+     * @return The generated JWT token.
+     */
     public String generateToken(UserDetails userDetails) {
         return generateToken(new HashMap<>(), userDetails);
     }
 
+    /**
+     * Generates a JWT token for a user with extra claims.
+     *
+     * @param extraClaims Additional claims to include in the token.
+     * @param userDetails The user details.
+     * @return The generated JWT token.
+     */
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
         return Jwts.builder()
                 .claims(extraClaims)
                 .subject(userDetails.getUsername())
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + authProperties.getJwt().getExpiration()))
+                .expiration(new Date(
+                        System.currentTimeMillis() + authProperties.getJwt().getExpiration()))
                 .signWith(getSignInKey())
                 .compact();
     }
 
+    /**
+     * Validates a JWT token against user details.
+     *
+     * @param token       The JWT token.
+     * @param userDetails The user details.
+     * @return True if the token is valid and belongs to the user, false otherwise.
+     */
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);

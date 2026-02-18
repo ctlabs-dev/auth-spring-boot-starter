@@ -14,6 +14,10 @@ import java.time.Year;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Service for handling email operations.
+ * Uses the configured {@link MailSenderStrategy} to send emails.
+ */
 @Slf4j
 @Service
 public class EmailService {
@@ -22,9 +26,7 @@ public class EmailService {
     private final AuthProperties authProperties;
     private final Environment environment;
 
-    public EmailService(MailSenderStrategy mailSenderStrategy,
-                        AuthProperties authProperties,
-                        Environment environment) {
+    public EmailService(MailSenderStrategy mailSenderStrategy, AuthProperties authProperties, Environment environment) {
         this.mailSenderStrategy = mailSenderStrategy;
         this.authProperties = authProperties;
         this.environment = environment;
@@ -32,19 +34,33 @@ public class EmailService {
 
     @PostConstruct
     public void validateConfiguration() {
-        if (authProperties.getNotifications().getMail().getProvider() == AuthProperties.Notifications.Mail.Provider.SMTP) {
+        if (authProperties.getNotifications().getMail().getProvider()
+            == AuthProperties.Notifications.Mail.Provider.SMTP) {
             String mailHost = environment.getProperty("spring.mail.host");
             if (mailHost == null || mailHost.isBlank()) {
-                log.warn("\n\n*** CONFIGURATION WARNING ***\nYou have selected SMTP provider, but no configuration was detected for 'spring.mail.host'.\nEmail sending is likely to fail.\n");
+                log.warn(
+                        "\n\n*** CONFIGURATION WARNING ***\nYou have selected SMTP provider, but no configuration was detected for 'spring.mail.host'.\nEmail sending is likely to fail.\n");
             }
-        } else if (authProperties.getNotifications().getMail().getProvider() == AuthProperties.Notifications.Mail.Provider.BREVO) {
-            String apiKey = authProperties.getNotifications().getMail().getBrevo().getApiKey();
+        } else if (authProperties.getNotifications().getMail().getProvider()
+                   == AuthProperties.Notifications.Mail.Provider.BREVO) {
+            String apiKey =
+                    authProperties.getNotifications().getMail().getBrevo().getApiKey();
             if (apiKey == null || apiKey.isBlank()) {
-                log.warn("\n\n*** CONFIGURATION WARNING ***\nYou have selected BREVO provider, but no 'ctlabs.auth.notifications.mail.brevo.api-key' was detected.\nEmail sending will fail.\n");
+                log.warn(
+                        "\n\n*** CONFIGURATION WARNING ***\nYou have selected BREVO provider, but no 'ctlabs.auth.notifications.mail.brevo.api-key' was detected.\nEmail sending will fail.\n");
             }
         }
     }
 
+    /**
+     * Sends a verification email to a user.
+     *
+     * @param to         The recipient's email address.
+     * @param name       The recipient's name.
+     * @param code       The verification code.
+     * @param expiration The expiration time value.
+     * @param unit       The expiration time unit (e.g., "minutes").
+     */
     @Async
     public void sendVerificationEmail(String to, String name, String code, long expiration, String unit) {
         Map<String, Object> variables = new HashMap<>();
@@ -63,6 +79,15 @@ public class EmailService {
         mailSenderStrategy.send(name, to, EmailType.VERIFICATION, "Verify your email", variables);
     }
 
+    /**
+     * Sends a password reset email to a user.
+     *
+     * @param to         The recipient's email address.
+     * @param name       The recipient's name.
+     * @param code       The reset code.
+     * @param expiration The expiration time value.
+     * @param unit       The expiration time unit.
+     */
     @Async
     public void sendPasswordResetEmail(String to, String name, String code, long expiration, String unit) {
         Map<String, Object> variables = new HashMap<>();
