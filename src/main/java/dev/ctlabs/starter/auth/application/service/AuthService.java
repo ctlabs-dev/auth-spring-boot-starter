@@ -16,7 +16,6 @@ import dev.ctlabs.starter.auth.domain.model.RefreshToken;
 import dev.ctlabs.starter.auth.domain.model.Role;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.model.VerificationCode;
-import dev.ctlabs.starter.auth.domain.repository.PermissionRepository;
 import dev.ctlabs.starter.auth.domain.repository.RefreshTokenRepository;
 import dev.ctlabs.starter.auth.domain.repository.RoleRepository;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
@@ -30,17 +29,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
@@ -55,7 +54,6 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final PermissionRepository permissionRepository;
     private final VerificationCodeRepository verificationCodeRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
@@ -87,7 +85,6 @@ public class AuthService {
         var authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(identifier, request.password()));
         var userDetails = (UserDetails) authentication.getPrincipal();
-        var jwt = jwtService.generateToken(userDetails);
 
         final String finalIdentifier = identifier;
         User user = userRepository
@@ -95,11 +92,22 @@ public class AuthService {
                 .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("roles", user.getRoles().stream().map(Role::getName).toList());
+        extraClaims.put(
+                "permissions",
+                user.getRoles().stream()
+                        .flatMap(role -> role.getPermissions().stream())
+                        .map(Permission::getSlug)
+                        .distinct()
+                        .toList());
+        var jwt = jwtService.generateToken(extraClaims, userDetails);
+
         String rawRefreshToken = UUID.randomUUID().toString();
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
         refreshToken.setTokenHash(passwordEncoder.encode(rawRefreshToken));
-        refreshToken.setExpiresAt(Instant.now().plus(30, ChronoUnit.DAYS)); // TODO: Parametrizar en AuthProperties
+        refreshToken.setExpiresAt(Instant.now().plus(authProperties.getRefreshToken().getExpiration()));
         refreshToken.setDeviceInfo(servletRequest.getHeader("User-Agent"));
         refreshToken.setIpAddress(servletRequest.getRemoteAddr());
         refreshToken = refreshTokenRepository.save(refreshToken);
@@ -171,7 +179,7 @@ public class AuthService {
 
         boolean isPhoneProviderNone =
                 authProperties.getNotifications().getPhone().getProvider()
-                == AuthProperties.Notifications.Phone.Provider.NONE;
+                        == AuthProperties.Notifications.Phone.Provider.NONE;
         if (hasPhone && isPhoneProviderNone) {
             user.setPhoneVerified(true);
         }
@@ -184,22 +192,23 @@ public class AuthService {
 
         if (hasEmail && !isEmailProviderNone) {
             String code = UUID.randomUUID().toString();
-            long expirationMinutes = authProperties.getVerification().getEmailLinkExpirationMinutes();
+            Duration expiration = authProperties.getVerification().getEmailLinkExpiration();
+            long minutes = expiration.toMinutes();
 
-            long displayValue = expirationMinutes;
+            long displayValue = minutes;
             String displayUnit = authProperties.getVerification().getUnitMinutes();
-            if (expirationMinutes >= 60 && expirationMinutes % 60 == 0) {
-                displayValue = expirationMinutes / 60;
+            if (minutes >= 60 && minutes % 60 == 0) {
+                displayValue = minutes / 60;
                 displayUnit = authProperties.getVerification().getUnitHours();
             }
 
-            createVerificationCode(user, "EMAIL_VERIFICATION", code, expirationMinutes, ChronoUnit.MINUTES);
+            createVerificationCode(user, "EMAIL_VERIFICATION", code, expiration);
             emailService.sendVerificationEmail(
                     user.getEmail(), profile.getFirstName(), code, displayValue, displayUnit);
         } else if (hasPhone && !isPhoneProviderNone) {
             String code = String.valueOf(new Random().nextInt(900000) + 100000);
-            long expirationMinutes = authProperties.getVerification().getPhoneCodeExpirationMinutes();
-            createVerificationCode(user, "PHONE_VERIFICATION", code, expirationMinutes, ChronoUnit.MINUTES);
+            Duration expiration = authProperties.getVerification().getPhoneCodeExpiration();
+            createVerificationCode(user, "PHONE_VERIFICATION", code, expiration);
             phoneService.sendVerificationCode(user.getPhoneNumber(), code);
         }
 
@@ -247,8 +256,7 @@ public class AuthService {
     /**
      * Verifies a user's phone number.
      *
-     * @param request The phone verification request containing phone number and
-     *                code.
+     * @param request The phone verification request containing phone number and code.
      * @return An {@link AuthResponse} confirming verification.
      */
     @Transactional
@@ -297,28 +305,28 @@ public class AuthService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
         String resetCode;
-        long expirationMinutes;
-        ChronoUnit unit = ChronoUnit.MINUTES;
+        Duration expiration;
 
         if (user.getEmail() != null) {
             resetCode = UUID.randomUUID().toString();
-            expirationMinutes = authProperties.getVerification().getEmailLinkExpirationMinutes();
+            expiration = authProperties.getVerification().getEmailLinkExpiration();
+            long minutes = expiration.toMinutes();
 
-            long displayValue = expirationMinutes;
+            long displayValue = minutes;
             String displayUnit = authProperties.getVerification().getUnitMinutes();
-            if (expirationMinutes >= 60 && expirationMinutes % 60 == 0) {
-                displayValue = expirationMinutes / 60;
+            if (minutes >= 60 && minutes % 60 == 0) {
+                displayValue = minutes / 60;
                 displayUnit = authProperties.getVerification().getUnitHours();
             }
 
             if (authProperties.getNotifications().getMail().getProvider()
-                != AuthProperties.Notifications.Mail.Provider.NONE) {
+                    != AuthProperties.Notifications.Mail.Provider.NONE) {
                 emailService.sendPasswordResetEmail(
                         user.getEmail(), user.getProfile().getFirstName(), resetCode, displayValue, displayUnit);
             }
         } else {
             resetCode = String.valueOf(new Random().nextInt(900000) + 100000);
-            expirationMinutes = authProperties.getVerification().getPhoneCodeExpirationMinutes();
+            expiration = authProperties.getVerification().getPhoneCodeExpiration();
 
             if (authProperties.getNotifications().getPhone().getProvider()
                 != AuthProperties.Notifications.Phone.Provider.NONE) {
@@ -326,7 +334,7 @@ public class AuthService {
             }
         }
 
-        createVerificationCode(user, "PASSWORD_RESET", resetCode, expirationMinutes, unit);
+        createVerificationCode(user, "PASSWORD_RESET", resetCode, expiration);
 
         return new AuthResponse("Password reset code sent.");
     }
@@ -408,188 +416,27 @@ public class AuthService {
             throw new IllegalArgumentException("User is not active");
         }
 
-        List<GrantedAuthority> authorities = new ArrayList<>();
-        for (Role role : user.getRoles()) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_" + role.getName()));
-            for (Permission permission : role.getPermissions()) {
-                authorities.add(new SimpleGrantedAuthority(permission.getSlug()));
-            }
-        }
-
         UserDetails userDetails = new org.springframework.security.core.userdetails.User(
                 user.getEmail() != null ? user.getEmail() : user.getPhoneNumber(),
-                user.getPassword(),
+                user.getPassword() != null ? user.getPassword() : "",
                 true,
                 true,
                 true,
                 true,
-                authorities);
+                Collections.emptyList());
 
-        String newJwt = jwtService.generateToken(userDetails);
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put("roles", user.getRoles().stream().map(Role::getName).toList());
+        extraClaims.put(
+                "permissions",
+                user.getRoles().stream()
+                        .flatMap(role -> role.getPermissions().stream())
+                        .map(Permission::getSlug)
+                        .distinct()
+                        .toList());
+        String newJwt = jwtService.generateToken(extraClaims, userDetails);
 
         return new AuthResponse(newJwt, null);
-    }
-
-    /**
-     * Changes the status of a user (e.g., "active", "suspended", "banned").
-     * This method is intended to be used by administrative components.
-     */
-    @Transactional
-    public void changeUserStatus(UUID userId, String newStatus) {
-        User user = userRepository
-                .findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-
-        user.setStatus(newStatus);
-        userRepository.save(user);
-
-        if (!"active".equalsIgnoreCase(newStatus)) {
-            refreshTokenRepository.deleteByUser_Id(userId);
-            log.info("Revoked refresh tokens for user: {}", userId);
-        }
-        log.info("User status changed. ID: {}, New Status: {}", userId, newStatus);
-    }
-
-    /**
-     * Soft deletes a user by changing their status to 'archived'.
-     * This preserves the user record for referential integrity but prevents login.
-     */
-    @Transactional
-    public void deleteUser(UUID userId) {
-        User user = userRepository
-                .findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-
-        user.setStatus("archived");
-        userRepository.save(user);
-        refreshTokenRepository.deleteByUser_Id(userId);
-        log.info("User soft-deleted (status set to archived). ID: {}", userId);
-    }
-
-    /**
-     * Creates a new role in the system.
-     * Intended for administrative use or initial setup.
-     *
-     * @param roleName    The name of the role.
-     * @param description The description of the role.
-     */
-    @Transactional
-    public void createRole(String roleName, String description) {
-        if (roleRepository.findByName(roleName).isPresent()) {
-            throw new IllegalArgumentException("Role already exists: " + roleName);
-        }
-        Role role = new Role();
-        role.setName(roleName);
-        role.setDescription(description);
-        roleRepository.save(role);
-        log.info("Role created: {}", roleName);
-    }
-
-    /**
-     * Assigns a role to a user.
-     * Intended for administrative use.
-     *
-     * @param userId   The ID of the user.
-     * @param roleName The name of the role to assign.
-     */
-    @Transactional
-    public void assignRole(UUID userId, String roleName) {
-        User user = userRepository
-                .findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-
-        Role role = roleRepository
-                .findByName(roleName)
-                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
-
-        user.getRoles().add(role);
-        userRepository.save(user);
-        log.info("Role '{}' assigned to user ID: {}", roleName, userId);
-    }
-
-    /**
-     * Removes a role from a user.
-     * Intended for administrative use.
-     *
-     * @param userId   The ID of the user.
-     * @param roleName The name of the role to remove.
-     */
-    @Transactional
-    public void removeRole(UUID userId, String roleName) {
-        User user = userRepository
-                .findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with ID: " + userId));
-
-        Role role = roleRepository
-                .findByName(roleName)
-                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
-
-        user.getRoles().remove(role);
-        userRepository.save(user);
-        log.info("Role '{}' removed from user ID: {}", roleName, userId);
-    }
-
-    /**
-     * Creates a new permission in the system.
-     * Intended for administrative use or initial setup.
-     *
-     * @param slug        The unique slug for the permission.
-     * @param description The description of the permission.
-     */
-    @Transactional
-    public void createPermission(String slug, String description) {
-        if (permissionRepository.findBySlug(slug).isPresent()) {
-            throw new IllegalArgumentException("Permission already exists: " + slug);
-        }
-        Permission permission = new Permission();
-        permission.setSlug(slug);
-        permission.setDescription(description);
-        permissionRepository.save(permission);
-        log.info("Permission created: {}", slug);
-    }
-
-    /**
-     * Assigns a permission to a role.
-     * Intended for administrative use.
-     *
-     * @param roleName       The name of the role.
-     * @param permissionSlug The slug of the permission.
-     */
-    @Transactional
-    public void assignPermissionToRole(String roleName, String permissionSlug) {
-        Role role = roleRepository
-                .findByName(roleName)
-                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
-
-        Permission permission = permissionRepository
-                .findBySlug(permissionSlug)
-                .orElseThrow(() -> new IllegalArgumentException("Permission not found: " + permissionSlug));
-
-        role.getPermissions().add(permission);
-        roleRepository.save(role);
-        log.info("Permission '{}' assigned to role '{}'", permissionSlug, roleName);
-    }
-
-    /**
-     * Removes a permission from a role.
-     * Intended for administrative use.
-     *
-     * @param roleName       The name of the role.
-     * @param permissionSlug The slug of the permission.
-     */
-    @Transactional
-    public void removePermissionFromRole(String roleName, String permissionSlug) {
-        Role role = roleRepository
-                .findByName(roleName)
-                .orElseThrow(() -> new IllegalArgumentException("Role not found: " + roleName));
-
-        Permission permission = permissionRepository
-                .findBySlug(permissionSlug)
-                .orElseThrow(() -> new IllegalArgumentException("Permission not found: " + permissionSlug));
-
-        role.getPermissions().remove(permission);
-        roleRepository.save(role);
-        log.info("Permission '{}' removed from role '{}'", permissionSlug, roleName);
     }
 
     /**
@@ -634,12 +481,12 @@ public class AuthService {
         log.info("Session revoked. ID: {}", sessionId);
     }
 
-    private void createVerificationCode(User user, String type, String code, long duration, ChronoUnit unit) {
+    private void createVerificationCode(User user, String type, String code, Duration duration) {
         VerificationCode vc = new VerificationCode();
         vc.setUser(user);
         vc.setType(type);
         vc.setCode(code);
-        vc.setExpiresAt(Instant.now().plus(duration, unit));
+        vc.setExpiresAt(Instant.now().plus(duration));
         verificationCodeRepository.save(vc);
     }
 }

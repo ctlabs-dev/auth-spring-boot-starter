@@ -23,5 +23,4 @@ public record RegisterRequest(
         String phoneNumber,
 
         @NotBlank(message = "Password is required") @ValidPassword
-        String password) {
-}
+        String password) {}

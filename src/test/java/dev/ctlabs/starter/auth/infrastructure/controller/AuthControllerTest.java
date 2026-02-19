@@ -82,7 +82,7 @@ class AuthControllerTest {
         assertThat(user.getProfile().getLastName()).isEqualTo("Perez");
 
         assertThat(user.isEmailVerified()).isTrue();
-        assertThat(user.getRoles()).extracting("name").contains("ROLE_USER");
+        assertThat(user.getRoles()).extracting("name").contains("USER");
     }
 
     @Test

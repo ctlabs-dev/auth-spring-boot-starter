@@ -14,5 +14,4 @@ import java.util.UUID;
  * @param createdAt  The timestamp when the session was created.
  * @param expiresAt  The timestamp when the session expires.
  */
-public record SessionInfo(UUID id, String deviceInfo, String ipAddress, Instant createdAt, Instant expiresAt) {
-}
+public record SessionInfo(UUID id, String deviceInfo, String ipAddress, Instant createdAt, Instant expiresAt) {}

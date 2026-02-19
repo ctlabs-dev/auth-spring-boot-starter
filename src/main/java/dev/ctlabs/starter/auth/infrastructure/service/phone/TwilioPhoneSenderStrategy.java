@@ -9,11 +9,11 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Base64;
 
-@Slf4j
 /**
  * Phone sender strategy implementation for Twilio.
  * Sends SMS or WhatsApp messages using Twilio's API.
  */
+@Slf4j
 public class TwilioPhoneSenderStrategy implements PhoneSenderStrategy {
 
     private final AuthProperties authProperties;
@@ -31,7 +31,7 @@ public class TwilioPhoneSenderStrategy implements PhoneSenderStrategy {
         this.restClient = RestClient.builder()
                 .baseUrl(
                         authProperties.getNotifications().getPhone().getTwilio().getBaseUrl() + "/2010-04-01/Accounts/"
-                        + accountSid)
+                                + accountSid)
                 .defaultHeader("Authorization", "Basic " + basicAuth)
                 .build();
     }

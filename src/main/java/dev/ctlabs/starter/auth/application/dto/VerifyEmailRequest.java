@@ -13,5 +13,4 @@ public record VerifyEmailRequest(
         @NotBlank(message = "Email is required") @Email(message = "Invalid email format")
         String email,
 
-        @NotBlank(message = "Code is required") String code) {
-}
+        @NotBlank(message = "Code is required") String code) {}

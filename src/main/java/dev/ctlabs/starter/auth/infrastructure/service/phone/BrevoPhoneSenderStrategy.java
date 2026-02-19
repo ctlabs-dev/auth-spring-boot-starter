@@ -45,6 +45,5 @@ public class BrevoPhoneSenderStrategy implements PhoneSenderStrategy {
         }
     }
 
-    private record BrevoSmsRequest(String sender, String recipient, String content) {
-    }
+    private record BrevoSmsRequest(String sender, String recipient, String content) {}
 }

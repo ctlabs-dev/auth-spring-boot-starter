@@ -5,5 +5,4 @@ package dev.ctlabs.starter.auth.application.dto;
  *
  * @param refreshToken The refresh token.
  */
-public record RefreshTokenRequest(String refreshToken) {
-}
+public record RefreshTokenRequest(String refreshToken) {}

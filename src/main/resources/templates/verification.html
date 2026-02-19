@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/>
     <title>Verify your email address</title>
-    <style type="text/css" rel="stylesheet" media="all">
+    <style media="all" rel="stylesheet" type="text/css">
         /* Base ------------------------------ */
         *:not(br):not(tr):not(html) {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -131,15 +131,16 @@
     </style>
 </head>
 <body>
-<table class="email-wrapper" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+<table cellpadding="0" cellspacing="0" class="email-wrapper" role="presentation" width="100%">
     <tr>
         <td align="center">
-            <table class="email-content" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <table cellpadding="0" cellspacing="0" class="email-content" role="presentation" width="100%">
                 <!-- Email Body -->
                 <tr>
-                    <td class="email-body" width="100%" cellpadding="0" cellspacing="0">
-                        <table class="email-body_inner" align="center" width="570" cellpadding="0" cellspacing="0"
-                               role="presentation">
+                    <td cellpadding="0" cellspacing="0" class="email-body" width="100%">
+                        <table align="center" cellpadding="0" cellspacing="0" class="email-body_inner"
+                               role="presentation"
+                               width="570">
                             <!-- Body content -->
                             <tr>
                                 <td class="content-cell">
@@ -147,17 +148,17 @@
                                     <p>Thanks for trying our service. We’re thrilled to have you on board. To get
                                         started, please verify your email address.</p>
                                     <!-- Action -->
-                                    <table class="body-action" align="center" width="100%" cellpadding="0"
-                                           cellspacing="0" role="presentation">
+                                    <table align="center" cellpadding="0" cellspacing="0" class="body-action"
+                                           role="presentation" width="100%">
                                         <tr>
                                             <td align="center">
-                                                <table width="100%" border="0" cellspacing="0" cellpadding="0"
-                                                       role="presentation">
+                                                <table border="0" cellpadding="0" cellspacing="0" role="presentation"
+                                                       width="100%">
                                                     <tr>
                                                         <td align="center">
-                                                            <a href="https://example.com/verify-email"
-                                                               th:href="${confirmationUrl}" class="button"
-                                                               target="_blank">Verify Email</a>
+                                                            <a class="button"
+                                                               href="https://example.com/verify-email" target="_blank"
+                                                               th:href="${confirmationUrl}">Verify Email</a>
                                                         </td>
                                                     </tr>
                                                 </table>
@@ -189,10 +190,10 @@
                 <!-- Email Footer -->
                 <tr>
                     <td>
-                        <table class="email-footer" align="center" width="570" cellpadding="0" cellspacing="0"
-                               role="presentation">
+                        <table align="center" cellpadding="0" cellspacing="0" class="email-footer" role="presentation"
+                               width="570">
                             <tr>
-                                <td class="content-cell" align="center">
+                                <td align="center" class="content-cell">
                                     <p class="f-fallback sub align-center">&copy; <span
                                             th:text="${currentYear}">YYYY</span> Auth Service. All rights reserved.</p>
                                 </td>

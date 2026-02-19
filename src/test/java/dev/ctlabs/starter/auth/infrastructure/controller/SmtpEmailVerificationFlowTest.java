@@ -1,17 +1,16 @@
 package dev.ctlabs.starter.auth.infrastructure.controller;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.icegreen.greenmail.util.GreenMail;
+import com.icegreen.greenmail.util.ServerSetupTest;
+import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.LoginRequest;
+import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
+import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 import jakarta.mail.internet.MimeMessage;
-
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,17 +26,15 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.icegreen.greenmail.util.GreenMail;
-import com.icegreen.greenmail.util.ServerSetupTest;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
-import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.LoginRequest;
-import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
-import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
-import dev.ctlabs.starter.auth.domain.repository.UserRepository;
-import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(
         properties = {

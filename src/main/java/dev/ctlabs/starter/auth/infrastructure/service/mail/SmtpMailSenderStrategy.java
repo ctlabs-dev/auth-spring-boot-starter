@@ -25,7 +25,10 @@ public class SmtpMailSenderStrategy implements MailSenderStrategy {
     private final Environment environment;
 
     public SmtpMailSenderStrategy(
-            JavaMailSender javaMailSender, AuthProperties authProperties, TemplateEngine templateEngine, Environment environment) {
+            JavaMailSender javaMailSender,
+            AuthProperties authProperties,
+            TemplateEngine templateEngine,
+            Environment environment) {
         this.javaMailSender = javaMailSender;
         this.authProperties = authProperties;
         this.templateEngine = templateEngine;
@@ -43,17 +46,22 @@ public class SmtpMailSenderStrategy implements MailSenderStrategy {
             MimeMessage mimeMessage = javaMailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, "UTF-8");
 
-            String fromEmail = authProperties.getNotifications().getMail().getSmtp().getFromEmail();
-            String fromName = authProperties.getNotifications().getMail().getSmtp().getFromName();
+            String fromEmail =
+                    authProperties.getNotifications().getMail().getSmtp().getFromEmail();
+            String fromName =
+                    authProperties.getNotifications().getMail().getSmtp().getFromName();
 
             if (fromEmail == null || fromEmail.isBlank()) {
                 String fallbackEmail = environment.getProperty("spring.mail.username");
                 if (fallbackEmail == null || fallbackEmail.isBlank()) {
-                    log.error("SMTP sender email (from-email) is not configured and spring.mail.username is not set. Email will not be sent.");
+                    log.error("SMTP sender email (from-email) is not configured and spring.mail.username is not set."
+                            + " Email will not be sent.");
                     return;
                 }
                 fromEmail = fallbackEmail;
-                log.warn("SMTP sender email (from-email) is not configured. Using spring.mail.username as fallback: {}", fromEmail);
+                log.warn(
+                        "SMTP sender email (from-email) is not configured. Using spring.mail.username as fallback: {}",
+                        fromEmail);
             }
 
             helper.setTo(to);

@@ -34,9 +34,8 @@ public class BrevoMailSenderStrategy implements MailSenderStrategy {
 
         if (templateId == null) {
             log.error(
-                    "Template ID for email type '{}' is not configured in AuthProperties. Skipping Brevo email to '{}'.",
-                    type,
-                    to);
+                    "Template ID for email type '{}' is not configured in AuthProperties. " +
+                    "Skipping Brevo email to '{}'.", type, to);
             return;
         }
 
@@ -58,14 +57,14 @@ public class BrevoMailSenderStrategy implements MailSenderStrategy {
 
     private Integer getTemplateId(EmailType type) {
         return switch (type) {
-            case VERIFICATION -> authProperties.getNotifications().getMail().getBrevo().getVerificationTemplateId();
-            case PASSWORD_RESET -> authProperties.getNotifications().getMail().getBrevo().getPasswordResetTemplateId();
+            case VERIFICATION ->
+                authProperties.getNotifications().getMail().getBrevo().getVerificationTemplateId();
+            case PASSWORD_RESET ->
+                authProperties.getNotifications().getMail().getBrevo().getPasswordResetTemplateId();
         };
     }
 
-    private record Recipient(String name, String email) {
-    }
+    private record Recipient(String name, String email) {}
 
-    private record BrevoEmailRequest(List<Recipient> to, long templateId, Map<String, Object> params) {
-    }
+    private record BrevoEmailRequest(List<Recipient> to, long templateId, Map<String, Object> params) {}
 }

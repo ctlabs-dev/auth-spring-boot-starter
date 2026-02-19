@@ -2,6 +2,7 @@ package dev.ctlabs.starter.auth.infrastructure.config;
 
 import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -26,15 +27,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
-
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, UserDetailsService userDetailsService) {
-        this.jwtAuthFilter = jwtAuthFilter;
-        this.userDetailsService = userDetailsService;
-    }
 
     /**
      * Configures the security filter chain.
@@ -50,12 +47,15 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http, AuthenticationProvider authenticationProvider, AuthProperties authProperties)
             throws Exception {
-        String authBaseUrl = authProperties.getBaseUrl();
+        String authBaseUrl = authProperties.getApplication().getBaseUrl();
         String authPath = "%s%s".formatted(authBaseUrl, "/**");
-        http.securityMatcher(authPath)
-                .csrf(AbstractHttpConfigurer::disable)
+        String[] publicPaths = authProperties.getPublicPaths().toArray(String[]::new);
+
+        http.csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth.requestMatchers(
                                 authPath, "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error")
+                        .permitAll()
+                        .requestMatchers(publicPaths)
                         .permitAll()
                         .anyRequest()
                         .authenticated())

@@ -1,10 +1,8 @@
 package dev.ctlabs.starter.auth.infrastructure.controller;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.domain.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,17 +16,18 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
-import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(
         properties = {
-            "ctlabs.auth.base-url=/custom/auth",
+            "ctlabs.auth.application.base-url=/custom/auth",
             "ctlabs.auth.password.validation-regex=^.{4}$",
             "ctlabs.auth.password.validation-message=Password must be exactly 4 characters",
-            "ctlabs.auth.default-role=ROLE_TESTER"
+            "ctlabs.auth.default-role=TESTER",
+            "ctlabs.auth.public-paths=/api/auth/**"
         })
 @AutoConfigureMockMvc
 @Transactional
@@ -63,7 +62,7 @@ class CustomConfigurationAuthControllerTest {
                 .andExpect(status().isOk());
 
         var user = userRepository.findByEmail("custom@test.com").orElseThrow();
-        assertThat(user.getRoles()).anyMatch(role -> role.getName().equals("ROLE_TESTER"));
+        assertThat(user.getRoles()).anyMatch(role -> role.getName().equals("TESTER"));
     }
 
     @Test
@@ -78,7 +77,7 @@ class CustomConfigurationAuthControllerTest {
     }
 
     @Test
-    void defaultUrlShouldReturnNotFound() throws Exception {
+    void defaultUrlShouldReturnNotFoundWhenWhitelisted() throws Exception {
         var request = new RegisterRequest("Custom", "Url", "custom@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")

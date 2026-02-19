@@ -13,14 +13,12 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.thymeleaf.TemplateEngine;
 
 /**
- * Configuration for email sending strategies.
- * Configures the appropriate {@link MailSenderStrategy} based on properties.
+ * Configuration for email sending strategies. Configures the appropriate {@link MailSenderStrategy}
+ * based on properties.
  */
 @Configuration
 public class MailConfig {
 
-    @Bean
-    @ConditionalOnProperty(prefix = "ctlabs.auth.notifications.mail", name = "provider", havingValue = "SMTP")
     /**
      * Creates an SMTP mail sender strategy.
      *
@@ -30,35 +28,39 @@ public class MailConfig {
      * @param environment The Spring Environment.
      * @return The configured {@link SmtpMailSenderStrategy}.
      */
+    @Bean
+    @ConditionalOnProperty(prefix = "ctlabs.auth.notifications.mail", name = "provider", havingValue = "SMTP")
     public MailSenderStrategy smtpMailSenderStrategy(
-            JavaMailSender javaMailSender, AuthProperties authProperties, TemplateEngine templateEngine, Environment environment) {
+            JavaMailSender javaMailSender,
+            AuthProperties authProperties,
+            TemplateEngine templateEngine,
+            Environment environment) {
         return new SmtpMailSenderStrategy(javaMailSender, authProperties, templateEngine, environment);
     }
 
+    /**
+     * Creates a No-Op mail sender strategy. Used when email notifications are disabled.
+     *
+     * @return The configured {@link NoOpMailSenderStrategy}.
+     */
     @Bean
     @ConditionalOnProperty(
             prefix = "ctlabs.auth.notifications.mail",
             name = "provider",
             havingValue = "NONE",
             matchIfMissing = true)
-    /**
-     * Creates a No-Op mail sender strategy.
-     * Used when email notifications are disabled.
-     *
-     * @return The configured {@link NoOpMailSenderStrategy}.
-     */
     public MailSenderStrategy noOpMailSenderStrategy() {
         return new NoOpMailSenderStrategy();
     }
 
-    @Bean
-    @ConditionalOnProperty(prefix = "ctlabs.auth.notifications.mail", name = "provider", havingValue = "BREVO")
     /**
      * Creates a Brevo mail sender strategy.
      *
      * @param authProperties The authentication properties.
      * @return The configured {@link BrevoMailSenderStrategy}.
      */
+    @Bean
+    @ConditionalOnProperty(prefix = "ctlabs.auth.notifications.mail", name = "provider", havingValue = "BREVO")
     public MailSenderStrategy brevoMailSenderStrategy(AuthProperties authProperties) {
         return new BrevoMailSenderStrategy(authProperties);
     }

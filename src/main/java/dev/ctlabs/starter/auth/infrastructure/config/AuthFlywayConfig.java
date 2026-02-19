@@ -1,6 +1,7 @@
 package dev.ctlabs.starter.auth.infrastructure.config;
 
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -15,6 +16,7 @@ import javax.sql.DataSource;
  */
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 @ConditionalOnClass(Flyway.class)
 @ConditionalOnProperty(
         prefix = "ctlabs.auth.db",
@@ -24,10 +26,6 @@ import javax.sql.DataSource;
 public class AuthFlywayConfig {
 
     private final DataSource dataSource;
-
-    public AuthFlywayConfig(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
 
     @PostConstruct
     public void migrateAuthSchema() {

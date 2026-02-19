@@ -19,10 +19,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST Controller for authentication operations.
- * Exposes endpoints for login, registration, password reset, y verificación.
+ * Exposes endpoints for login, registration, password reset, and verification.
  */
 @RestController
-@RequestMapping("${ctlabs.auth.base-url:/api/auth}")
+@RequestMapping("${ctlabs.auth.application.base-url:/api/auth}")
 public class AuthController {
 
     private final AuthService authService;

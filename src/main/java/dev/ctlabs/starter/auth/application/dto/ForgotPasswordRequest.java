@@ -9,5 +9,4 @@ import jakarta.validation.constraints.NotBlank;
  */
 public record ForgotPasswordRequest(
         @NotBlank(message = "Email or phone number is required")
-        String username) {
-}
+        String username) {}

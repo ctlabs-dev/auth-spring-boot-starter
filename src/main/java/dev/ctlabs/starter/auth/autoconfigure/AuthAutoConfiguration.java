@@ -1,10 +1,6 @@
 package dev.ctlabs.starter.auth.autoconfigure;
 
-import dev.ctlabs.starter.auth.domain.model.Profile;
-import dev.ctlabs.starter.auth.domain.model.Role;
-import dev.ctlabs.starter.auth.domain.model.User;
-import dev.ctlabs.starter.auth.domain.repository.RoleRepository;
-import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.application.service.UserManagementService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
@@ -50,54 +46,21 @@ public class AuthAutoConfiguration {
     /**
      * Creates an initial admin user if configured.
      *
-     * @param userRepository  The user repository.
-     * @param roleRepository  The role repository.
-     * @param passwordEncoder The password encoder.
-     * @param authProperties  The authentication properties.
+     * @param userManagementService The service to manage users.
+     * @param authProperties        The authentication properties.
      * @return A CommandLineRunner that creates the admin user.
      */
     @Bean
     @ConditionalOnProperty(prefix = "ctlabs.auth.admin", name = "enabled", havingValue = "true")
     public CommandLineRunner createInitialAdmin(
-            UserRepository userRepository,
-            RoleRepository roleRepository,
-            PasswordEncoder passwordEncoder,
-            AuthProperties authProperties) {
+            UserManagementService userManagementService, AuthProperties authProperties) {
         return args -> {
             AuthProperties.Admin adminProps = authProperties.getAdmin();
-
             if (adminProps.getEmail() == null || adminProps.getPassword() == null) {
                 log.warn("Admin user creation enabled but email or password not provided in properties.");
                 return;
             }
-
-            if (userRepository.findByEmail(adminProps.getEmail()).isEmpty()) {
-                log.info("Creating initial admin user: {}", adminProps.getEmail());
-                User admin = new User();
-                admin.setEmail(adminProps.getEmail());
-                admin.setPassword(passwordEncoder.encode(adminProps.getPassword()));
-                admin.setEmailVerified(true);
-                admin.setPhoneVerified(true);
-                admin.setStatus("active");
-
-                Profile profile = new Profile();
-                profile.setFirstName(adminProps.getFirstName());
-                profile.setLastName(adminProps.getLastName());
-                profile.setUser(admin);
-                admin.setProfile(profile);
-
-                String roleName = adminProps.getRole();
-                Role role = roleRepository.findByName(roleName).orElseGet(() -> {
-                    Role newRole = new Role();
-                    newRole.setName(roleName);
-                    newRole.setDescription("Administrator role");
-                    return roleRepository.save(newRole);
-                });
-                admin.getRoles().add(role);
-
-                userRepository.save(admin);
-                log.info("Initial admin user created successfully.");
-            }
+            userManagementService.createAdminUserIfNotExists(adminProps);
         };
     }
 }

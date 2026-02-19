@@ -4,6 +4,7 @@ import dev.ctlabs.starter.auth.domain.model.Permission;
 import dev.ctlabs.starter.auth.domain.model.Role;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -22,13 +23,10 @@ import java.util.Optional;
  * Loads user details from the database for Spring Security authentication.
  */
 @Service
+@RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
-
-    public CustomUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
-    }
 
     @Override
     @Transactional(readOnly = true)

@@ -4,12 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
-@Slf4j
 /**
  * No-operation mail sender strategy.
  * Used when email notifications are disabled; logs the email attempt instead of
  * sending.
  */
+@Slf4j
 public class NoOpMailSenderStrategy implements MailSenderStrategy {
     @Override
     public void send(String name, String to, EmailType type, String subject, Map<String, Object> variables) {
