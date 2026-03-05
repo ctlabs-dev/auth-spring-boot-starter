@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(
         properties = {
-            "ctlabs.auth.application.base-url=/custom/auth",
+            "ctlabs.auth.base-url=/custom/auth",
             "ctlabs.auth.password.validation-regex=^.{4}$",
             "ctlabs.auth.password.validation-message=Password must be exactly 4 characters",
             "ctlabs.auth.default-role=TESTER",

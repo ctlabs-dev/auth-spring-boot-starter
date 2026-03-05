@@ -10,7 +10,7 @@
     </parent>
     <groupId>dev.ctlabs</groupId>
     <artifactId>auth-spring-boot-starter</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>Auth Starter</name>
     <description>Authentication starter for CTLabs</description>
     <url/>

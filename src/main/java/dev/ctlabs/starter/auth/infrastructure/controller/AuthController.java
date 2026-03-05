@@ -2,9 +2,12 @@ package dev.ctlabs.starter.auth.infrastructure.controller;
 
 import dev.ctlabs.starter.auth.application.dto.AuthResponse;
 import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.LogoutRequest;
+import dev.ctlabs.starter.auth.application.dto.MessageResponse;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResendVerificationRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
 import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
@@ -22,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * Exposes endpoints for login, registration, password reset, and verification.
  */
 @RestController
-@RequestMapping("${ctlabs.auth.application.base-url:/api/auth}")
+@RequestMapping("${ctlabs.auth.base-url:/api/auth}")
 public class AuthController {
 
     private final AuthService authService;
@@ -38,7 +41,7 @@ public class AuthController {
      * @return The authentication response.
      */
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<MessageResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authService.register(request));
     }
 
@@ -73,7 +76,7 @@ public class AuthController {
      * @return The response confirming verification.
      */
     @PostMapping("/email-verification")
-    public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+    public ResponseEntity<MessageResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
         return ResponseEntity.ok(authService.verifyEmail(request));
     }
 
@@ -84,8 +87,20 @@ public class AuthController {
      * @return The response confirming verification.
      */
     @PostMapping("/phone-verification")
-    public ResponseEntity<AuthResponse> verifyPhone(@Valid @RequestBody VerifyPhoneRequest request) {
+    public ResponseEntity<MessageResponse> verifyPhone(@Valid @RequestBody VerifyPhoneRequest request) {
         return ResponseEntity.ok(authService.verifyPhone(request));
+    }
+
+    /**
+     * Resends a verification code to the user.
+     * Supports both email and phone number verification.
+     *
+     * @param request The resend verification request containing username (email or phone).
+     * @return The response confirming the code has been resent.
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<MessageResponse> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        return ResponseEntity.ok(authService.resendVerification(request));
     }
 
     /**
@@ -95,7 +110,7 @@ public class AuthController {
      * @return The response indicating the code has been sent.
      */
     @PostMapping("/forgot-password")
-    public ResponseEntity<AuthResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<MessageResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         return ResponseEntity.ok(authService.forgotPassword(request));
     }
 
@@ -106,7 +121,19 @@ public class AuthController {
      * @return The response confirming the password reset.
      */
     @PostMapping("/reset-password")
-    public ResponseEntity<AuthResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+    public ResponseEntity<MessageResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
         return ResponseEntity.ok(authService.resetPassword(request));
+    }
+
+    /**
+     * Logs out the current user by invalidating the specified refresh token.
+     * This only closes the session for the current device.
+     *
+     * @param request The logout request containing the refresh token to invalidate.
+     * @return The response confirming logout.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<MessageResponse> logout(@Valid @RequestBody LogoutRequest request) {
+        return ResponseEntity.ok(authService.logout(request));
     }
 }

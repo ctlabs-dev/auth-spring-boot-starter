@@ -76,7 +76,7 @@ public class EmailService {
         variables.put("unit", unit);
         variables.put("currentYear", Year.now().getValue());
 
-        String confirmationUrl = UriComponentsBuilder.fromUriString(authProperties.getApplication().getFrontendUrl())
+        String confirmationUrl = UriComponentsBuilder.fromUriString(authProperties.getNotifications().getMail().getFrontendUrl())
                 .path("/verify-email")
                 .queryParam("code", code)
                 .queryParam("email", to)
@@ -103,7 +103,7 @@ public class EmailService {
         variables.put("unit", unit);
         variables.put("currentYear", Year.now().getValue());
 
-        String resetUrl = UriComponentsBuilder.fromUriString(authProperties.getApplication().getFrontendUrl())
+        String resetUrl = UriComponentsBuilder.fromUriString(authProperties.getNotifications().getMail().getFrontendUrl())
                 .path("/reset-password")
                 .queryParam("code", code)
                 .queryParam("email", to)

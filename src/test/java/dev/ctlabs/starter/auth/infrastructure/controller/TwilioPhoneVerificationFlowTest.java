@@ -165,7 +165,7 @@ class TwilioPhoneVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.accessToken").exists());
     }
 
     @Test
@@ -245,7 +245,7 @@ class TwilioPhoneVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(verifyRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Phone is already verified."));
+                .andExpect(jsonPath("$.message").value("Phone is already verified."));
     }
 
     @Test

@@ -73,7 +73,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("User registered. Please verify your account."));
+                .andExpect(jsonPath("$.message").value("User registered."));
 
         var user = userRepository.findByEmail("juan.perez@test.com").orElseThrow();
 
@@ -93,7 +93,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("User registered. Please verify your account."));
+                .andExpect(jsonPath("$.message").value("User registered."));
 
         var user = userRepository.findByPhoneNumber("+59170712345").orElseThrow();
         assertThat(user.isPhoneVerified()).isTrue();
@@ -107,7 +107,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("User registered. Please verify your account."));
+                .andExpect(jsonPath("$.message").value("User registered."));
     }
 
     @Test
@@ -214,7 +214,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.accessToken").exists())
                 .andExpect(jsonPath("$.refreshToken").exists());
     }
 
@@ -350,7 +350,7 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(refreshRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.accessToken").exists());
     }
 
     @Test
@@ -488,6 +488,59 @@ class AuthControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(oldLoginRequest)))
                 .andExpect(status().isUnauthorized());
+    }
+    // </editor-fold>
+
+    // <editor-fold desc="Resend Verification Tests">
+    @Test
+    void resendVerificationShouldFailWhenUserNotFound() throws Exception {
+        var request = """
+                {
+                  "username": "nonexistent@test.com",
+                  "channel": "email"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerificationShouldFailWhenAlreadyVerified() throws Exception {
+        var registerRequest = new RegisterRequest("Test", "User", "verified@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        // User is auto-verified in test mode (provider = NONE)
+        var request = """
+                {
+                  "username": "verified@test.com",
+                  "channel": "email"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerificationShouldFailWhenInvalidChannel() throws Exception {
+        var request = """
+                {
+                  "username": "test@test.com",
+                  "channel": "invalid"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
     }
     // </editor-fold>
 }

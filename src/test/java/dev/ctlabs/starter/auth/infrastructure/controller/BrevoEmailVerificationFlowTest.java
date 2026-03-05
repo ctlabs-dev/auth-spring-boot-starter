@@ -174,7 +174,7 @@ class BrevoEmailVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.accessToken").exists());
     }
 
     @Test
@@ -258,7 +258,7 @@ class BrevoEmailVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(verifyRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Email is already verified."));
+                .andExpect(jsonPath("$.message").value("Email is already verified."));
     }
 
     @Test

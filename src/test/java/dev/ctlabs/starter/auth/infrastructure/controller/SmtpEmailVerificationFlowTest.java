@@ -186,7 +186,7 @@ class SmtpEmailVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").exists());
+                .andExpect(jsonPath("$.accessToken").exists());
     }
 
     @Test
@@ -282,7 +282,7 @@ class SmtpEmailVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(verifyRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Email is already verified."));
+                .andExpect(jsonPath("$.message").value("Email is already verified."));
     }
 
     @Test
@@ -364,5 +364,50 @@ class SmtpEmailVerificationFlowTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(oldLoginRequest)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void resendVerificationShouldGenerateNewCodeInDatabase() throws Exception {
+        var registerRequest = new RegisterRequest("Resend", "User", "resend@test.com", null, "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isOk());
+
+        var user = userRepository.findByEmail("resend@test.com").orElseThrow();
+
+        // Get the first code
+        var firstCode = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(user.getId())
+                        && "EMAIL_VERIFICATION".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        String firstCodeValue = firstCode.getCode();
+
+        // Resend verification
+        var request = """
+                {
+                  "username": "resend@test.com",
+                  "channel": "email"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("A new verification code has been sent to your email."));
+
+        // Verify new code was generated
+        var newCode = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(user.getId())
+                        && "EMAIL_VERIFICATION".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
+
+        // The new code should be different from the first one
+        assertThat(newCode.getCode()).isNotEqualTo(firstCodeValue);
     }
 }

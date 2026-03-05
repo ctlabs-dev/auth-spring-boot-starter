@@ -3,9 +3,10 @@ package dev.ctlabs.starter.auth.infrastructure.config;
 import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import dev.ctlabs.starter.auth.infrastructure.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -24,7 +25,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * Security configuration for the application.
  * Configures JWT authentication, session management, and access control.
  */
-@Configuration
+@AutoConfiguration(before = ServletWebSecurityAutoConfiguration.class)
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
@@ -43,11 +44,10 @@ public class SecurityConfig {
      * @throws Exception If an error occurs during configuration.
      */
     @Bean
-    @Order(1)
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http, AuthenticationProvider authenticationProvider, AuthProperties authProperties)
             throws Exception {
-        String authBaseUrl = authProperties.getApplication().getBaseUrl();
+        String authBaseUrl = authProperties.getBaseUrl();
         String authPath = "%s%s".formatted(authBaseUrl, "/**");
         String[] publicPaths = authProperties.getPublicPaths().toArray(String[]::new);
 
@@ -67,6 +67,7 @@ public class SecurityConfig {
     }
 
     @Bean
+    @ConditionalOnMissingBean
     public AuthenticationProvider authenticationProvider(PasswordEncoder passwordEncoder) {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder);
@@ -74,7 +75,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) {
+    @ConditionalOnMissingBean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 }

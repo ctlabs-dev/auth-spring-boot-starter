@@ -1,1 +1,2 @@
 dev.ctlabs.starter.auth.autoconfigure.AuthAutoConfiguration
+dev.ctlabs.starter.auth.infrastructure.config.SecurityConfig

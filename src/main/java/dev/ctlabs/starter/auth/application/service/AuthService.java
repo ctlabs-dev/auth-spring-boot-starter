@@ -2,9 +2,12 @@ package dev.ctlabs.starter.auth.application.service;
 
 import dev.ctlabs.starter.auth.application.dto.AuthResponse;
 import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
+import dev.ctlabs.starter.auth.application.dto.LogoutRequest;
+import dev.ctlabs.starter.auth.application.dto.MessageResponse;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
 import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
+import dev.ctlabs.starter.auth.application.dto.ResendVerificationRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.SessionInfo;
 import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
@@ -125,7 +128,7 @@ public class AuthService {
      * @return An {@link AuthResponse} requiring verification.
      */
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public MessageResponse register(RegisterRequest request) {
         String email = request.email() != null ? request.email().trim().toLowerCase() : null;
         boolean hasEmail = email != null && !email.isBlank();
         boolean hasPhone =
@@ -213,7 +216,7 @@ public class AuthService {
         }
 
         log.info("User registered successfully with ID: {}", user.getId());
-        return new AuthResponse("User registered. Please verify your account.");
+        return new MessageResponse("User registered.");
     }
 
     /**
@@ -223,7 +226,7 @@ public class AuthService {
      * @return An {@link AuthResponse} confirming verification.
      */
     @Transactional
-    public AuthResponse verifyEmail(VerifyEmailRequest request) {
+    public MessageResponse verifyEmail(VerifyEmailRequest request) {
         String email = request.email();
         if (email != null) {
             email = email.trim().toLowerCase();
@@ -234,7 +237,7 @@ public class AuthService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided email."));
 
         if (user.isEmailVerified()) {
-            return new AuthResponse("Email is already verified.");
+            return new MessageResponse("Email is already verified.");
         }
 
         VerificationCode vc = verificationCodeRepository
@@ -250,7 +253,7 @@ public class AuthService {
         verificationCodeRepository.delete(vc);
 
         log.info("Email verified successfully for user: {}", email);
-        return new AuthResponse("Email verified successfully.");
+        return new MessageResponse("Email verified successfully.");
     }
 
     /**
@@ -260,13 +263,13 @@ public class AuthService {
      * @return An {@link AuthResponse} confirming verification.
      */
     @Transactional
-    public AuthResponse verifyPhone(VerifyPhoneRequest request) {
+    public MessageResponse verifyPhone(VerifyPhoneRequest request) {
         User user = userRepository
                 .findByPhoneNumber(request.phoneNumber())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with the provided phone number."));
 
         if (user.isPhoneVerified()) {
-            return new AuthResponse("Phone is already verified.");
+            return new MessageResponse("Phone is already verified.");
         }
 
         VerificationCode vc = verificationCodeRepository
@@ -282,7 +285,99 @@ public class AuthService {
         verificationCodeRepository.delete(vc);
 
         log.info("Phone verified successfully for user: {}", request.phoneNumber());
-        return new AuthResponse("Phone verified successfully.");
+        return new MessageResponse("Phone verified successfully.");
+    }
+
+    /**
+     * Resends a verification code to the user.
+     * The channel (email or phone) must be explicitly specified.
+     * Deletes any existing verification code and generates a new one.
+     *
+     * @param request The resend verification request containing username and channel.
+     * @return A message response confirming the code has been sent.
+     */
+    @Transactional
+    public MessageResponse resendVerification(ResendVerificationRequest request) {
+        String identifier = request.username();
+        String channel = request.channel();
+
+        if (identifier == null || identifier.isBlank()) {
+            throw new IllegalArgumentException("Username is required");
+        }
+
+        if (identifier.contains("@")) {
+            identifier = identifier.trim().toLowerCase();
+        }
+
+        final String finalIdentifier = identifier;
+
+        User user = userRepository.findByEmail(finalIdentifier)
+                .or(() -> userRepository.findByPhoneNumber(finalIdentifier))
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        Profile profile = user.getProfile();
+        boolean isEmail = "email".equalsIgnoreCase(channel);
+
+        if (isEmail && (user.getEmail() == null || user.getEmail().isBlank())) {
+            throw new IllegalArgumentException("User does not have an email address");
+        }
+
+        if (!isEmail && (user.getPhoneNumber() == null || user.getPhoneNumber().isBlank())) {
+            throw new IllegalArgumentException("User does not have a phone number");
+        }
+
+        if (isEmail && user.isEmailVerified()) {
+            throw new IllegalArgumentException("Email is already verified");
+        }
+
+        if (!isEmail && user.isPhoneVerified()) {
+            throw new IllegalArgumentException("Phone number is already verified");
+        }
+
+        boolean isEmailProviderNone = authProperties.getNotifications().getMail().getProvider()
+                == AuthProperties.Notifications.Mail.Provider.NONE;
+        boolean isPhoneProviderNone = authProperties.getNotifications().getPhone().getProvider()
+                == AuthProperties.Notifications.Phone.Provider.NONE;
+
+        if (isEmail && isEmailProviderNone) {
+            throw new IllegalArgumentException("Email verification is not enabled");
+        }
+
+        if (!isEmail && isPhoneProviderNone) {
+            throw new IllegalArgumentException("Phone verification is not enabled");
+        }
+
+        String verificationType = isEmail ? "EMAIL_VERIFICATION" : "PHONE_VERIFICATION";
+        verificationCodeRepository.deleteByUser_IdAndType(user.getId(), verificationType);
+
+        if (isEmail) {
+            String code = UUID.randomUUID().toString();
+            Duration expiration = authProperties.getVerification().getEmailLinkExpiration();
+            long minutes = expiration.toMinutes();
+
+            long displayValue = minutes;
+            String displayUnit = authProperties.getVerification().getUnitMinutes();
+            if (minutes >= 60 && minutes % 60 == 0) {
+                displayValue = minutes / 60;
+                displayUnit = authProperties.getVerification().getUnitHours();
+            }
+
+            createVerificationCode(user, "EMAIL_VERIFICATION", code, expiration);
+            emailService.sendVerificationEmail(
+                    user.getEmail(), profile.getFirstName(), code, displayValue, displayUnit);
+
+            log.info("Email verification code resent to: {}", user.getEmail());
+            return new MessageResponse("A new verification code has been sent to your email.");
+        } else {
+            String code = String.valueOf(new Random().nextInt(900000) + 100000);
+            Duration expiration = authProperties.getVerification().getPhoneCodeExpiration();
+
+            createVerificationCode(user, "PHONE_VERIFICATION", code, expiration);
+            phoneService.sendVerificationCode(user.getPhoneNumber(), code);
+
+            log.info("Phone verification code resent to: {}", user.getPhoneNumber());
+            return new MessageResponse("A new verification code has been sent to your phone.");
+        }
     }
 
     /**
@@ -292,7 +387,7 @@ public class AuthService {
      * @return An {@link AuthResponse} indicating the code has been sent.
      */
     @Transactional
-    public AuthResponse forgotPassword(ForgotPasswordRequest request) {
+    public MessageResponse forgotPassword(ForgotPasswordRequest request) {
         String identifier = request.username();
         if (identifier != null && identifier.contains("@")) {
             identifier = identifier.trim().toLowerCase();
@@ -336,7 +431,7 @@ public class AuthService {
 
         createVerificationCode(user, "PASSWORD_RESET", resetCode, expiration);
 
-        return new AuthResponse("Password reset code sent.");
+        return new MessageResponse("Password reset code sent.");
     }
 
     /**
@@ -347,7 +442,7 @@ public class AuthService {
      * @return An {@link AuthResponse} confirming the password reset.
      */
     @Transactional
-    public AuthResponse resetPassword(ResetPasswordRequest request) {
+    public MessageResponse resetPassword(ResetPasswordRequest request) {
         String identifier = request.username();
         if (identifier != null && identifier.contains("@")) {
             identifier = identifier.trim().toLowerCase();
@@ -374,7 +469,7 @@ public class AuthService {
 
         refreshTokenRepository.deleteByUser_Id(user.getId());
 
-        return new AuthResponse("Password reset successfully.");
+        return new MessageResponse("Password reset successfully.");
     }
 
     /**
@@ -479,6 +574,39 @@ public class AuthService {
 
         refreshTokenRepository.delete(token);
         log.info("Session revoked. ID: {}", sessionId);
+    }
+
+    /**
+     * Logs out the user by deleting the specified refresh token.
+     * This invalidates only the session associated with the provided refresh token.
+     *
+     * @param request The logout request containing the refresh token to invalidate.
+     * @return A message response confirming logout.
+     */
+    @Transactional
+    public MessageResponse logout(LogoutRequest request) {
+        String compositeToken = request.refreshToken();
+
+        if (compositeToken == null || !compositeToken.contains(":")) {
+            throw new IllegalArgumentException("Invalid refresh token format");
+        }
+
+        String[] parts = compositeToken.split(":");
+        UUID tokenId = UUID.fromString(parts[0]);
+        String rawToken = parts[1];
+
+        RefreshToken tokenEntity = refreshTokenRepository
+                .findById(tokenId)
+                .orElseThrow(() -> new IllegalArgumentException("Refresh token not found"));
+
+        if (!passwordEncoder.matches(rawToken, tokenEntity.getTokenHash())) {
+            throw new IllegalArgumentException("Invalid refresh token");
+        }
+
+        refreshTokenRepository.delete(tokenEntity);
+
+        log.info("User logged out successfully. Token ID: {}", tokenId);
+        return new MessageResponse("Logout successful.");
     }
 
     private void createVerificationCode(User user, String type, String code, Duration duration) {

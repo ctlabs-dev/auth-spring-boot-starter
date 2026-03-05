@@ -22,9 +22,9 @@ import java.util.Set;
 public class AuthProperties {
 
     /**
-     * General application settings (URLs, etc).
+     * Base URL for authentication endpoints. Default: "/api/auth".
      */
-    private Application application = new Application();
+    private String baseUrl = "/api/auth";
 
     /**
      * Default role assigned to new users upon registration. Default: "USER".
@@ -72,21 +72,6 @@ public class AuthProperties {
      */
     private Password password = new Password();
 
-    /**
-     * General application configuration.
-     */
-    @Getter
-    @Setter
-    public static class Application {
-        /**
-         * Base URL for authentication endpoints. Default: "/api/auth".
-         */
-        private String baseUrl = "/api/auth";
-        /**
-         * URL of the frontend application. Used for CORS and email links. Default: "http://localhost:3000".
-         */
-        private String frontendUrl = "http://localhost:3000";
-    }
 
     /**
      * Configuration for JWT access tokens.
@@ -143,6 +128,11 @@ public class AuthProperties {
              * Selects the mail provider. Default is NONE.
              */
             private Provider provider = Provider.NONE;
+            /**
+             * URL of the frontend application. Used to generate email verification and password reset links.
+             * Default: "http://localhost:3000".
+             */
+            private String frontendUrl = "http://localhost:3000";
             /**
              * SMTP configuration. Used when provider is SMTP.
              */
