@@ -1,54 +1,77 @@
 # Auth Spring Boot Starter
 
-A production-ready Spring Boot Starter providing complete authentication and authorization out-of-the-box. Seamlessly integrate JWT authentication, user registration, multi-channel verification, and role management into your Spring Boot applications.
+A production-ready Spring Boot Starter that provides complete JWT authentication and authorization out-of-the-box.
 
 ## 📚 Documentation
 
-Full documentation is available at **[docs.ctlabs.dev](https://docs.ctlabs.dev)**.
+**Complete documentation available at [docs.ctlabs.dev](https://docs.ctlabs.dev)**
 
-## ✨ Key Features
+## ✨ Features
 
-*   **JWT Authentication**: Automatic token generation, validation, and refresh.
-*   **User Registration**: Email and phone-based registration.
-*   **Multi-channel Verification**: Email (SMTP), SMS (Twilio), and WhatsApp.
-*   **Isolated Database**: Dedicated Flyway migrations with separate history table.
-*   **Security Filter Chain**: Pre-configured security for auth endpoints.
+- JWT-based authentication with automatic token management
+- User registration with email/phone verification
+- Multi-channel notifications (SMTP, Twilio, Brevo)
+- Session management
+- Role-based authorization
+- Isolated database migrations
 
 ## 🚀 Quick Start
 
-### Installation
-
-Add the dependency to your project:
+### 1. Add Dependency
 
 **Maven**
 ```xml
 <dependency>
     <groupId>dev.ctlabs</groupId>
     <artifactId>auth-spring-boot-starter</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
 
 **Gradle**
 ```groovy
-implementation 'dev.ctlabs:auth-spring-boot-starter:0.0.1-SNAPSHOT'
+implementation 'dev.ctlabs:auth-spring-boot-starter:0.1.0'
 ```
 
-### Basic Configuration
+### 2. Configure
 
-Add to your `application.yml`:
+Minimal `application.properties`:
 
-```yaml
-ctlabs:
-  auth:
-    jwt:
-      secret-key: ${JWT_SECRET} # Must be a long, secure Base64 string
-      expiration: 86400000 # 24 hours
-    frontend-url: http://localhost:3000
+```properties
+# Auth Starter Configuration
+spring.datasource.url=jdbc:postgresql://localhost:5432/your_db
+spring.datasource.username=your_user
+spring.datasource.password=your_password
+
+ctlabs.auth.jwt.secret-key=${JWT_SECRET_KEY:long_and_secure_secret_key}
+
+# Exclude default Spring Security config for compatibility
+spring.autoconfigure.exclude=org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration
+
 ```
 
-For detailed configuration and guides, please visit the [official documentation](https://docs.ctlabs.dev).
+### 3. Use
+
+The starter automatically exposes these authentication endpoints:
+
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login
+- `POST /api/auth/refresh-token` - Refresh access token
+- `POST /api/auth/logout` - Logout (current device)
+- `POST /api/auth/email-verification` - Verify email with code
+- `POST /api/auth/phone-verification` - Verify phone with code
+- `POST /api/auth/resend-verification` - Resend verification code
+- `POST /api/auth/forgot-password` - Request password reset
+- `POST /api/auth/reset-password` - Reset password with code
+
+**For complete guides, configuration options, and examples, visit [docs.ctlabs.dev](https://docs.ctlabs.dev)**
+
+## 📦 Requirements
+
+- Java 17+
+- Spring Boot 3.x / 4.x
+- PostgreSQL (recommended) or any JPA-compatible database
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Apache License 2.0 - See [LICENSE](LICENSE) file for details.
