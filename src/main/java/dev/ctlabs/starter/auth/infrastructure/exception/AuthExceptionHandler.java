@@ -12,6 +12,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Global exception handler for el authentication controller.
+ * Maps exceptions to RFC 7807 ProblemDetail responses.
+ */
 @Slf4j
 @RestControllerAdvice(assignableTypes = AuthController.class)
 public class AuthExceptionHandler {
@@ -35,13 +39,14 @@ public class AuthExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleValidationExceptions(MethodArgumentNotValidException ex) {
         log.error("Validation error: {}", ex.getMessage());
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Field validation error");
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Field validation error");
         problemDetail.setTitle("Validation failed");
 
         Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getFieldErrors().forEach(error ->
-                errors.put(error.getField(), error.getDefaultMessage())
-        );
+        ex.getBindingResult()
+                .getFieldErrors()
+                .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
         problemDetail.setProperty("errors", errors);
 
         return problemDetail;
@@ -63,7 +68,8 @@ public class AuthExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneralException(Exception e) {
         log.error("Internal server error: ", e);
-        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+        ProblemDetail problemDetail =
+                ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
         problemDetail.setTitle("Internal Error");
         return problemDetail;
     }

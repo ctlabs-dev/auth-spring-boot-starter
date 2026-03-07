@@ -1,14 +1,15 @@
 package dev.ctlabs.starter.auth.infrastructure.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.ctlabs.starter.auth.application.dto.AuthResponse;
 import dev.ctlabs.starter.auth.application.dto.ForgotPasswordRequest;
 import dev.ctlabs.starter.auth.application.dto.LoginRequest;
+import dev.ctlabs.starter.auth.application.dto.RefreshTokenRequest;
 import dev.ctlabs.starter.auth.application.dto.RegisterRequest;
 import dev.ctlabs.starter.auth.application.dto.ResetPasswordRequest;
-import dev.ctlabs.starter.auth.application.dto.VerifyEmailRequest;
-import dev.ctlabs.starter.auth.application.dto.VerifyPhoneRequest;
 import dev.ctlabs.starter.auth.domain.model.User;
 import dev.ctlabs.starter.auth.domain.repository.UserRepository;
+import dev.ctlabs.starter.auth.domain.repository.VerificationCodeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,22 +37,26 @@ class AuthControllerTest {
 
     @Container
     @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg18");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:latest");
 
     private final MockMvc mockMvc;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
+    private final VerificationCodeRepository verificationCodeRepository;
 
     @Autowired
-    public AuthControllerTest(MockMvc mockMvc,
-                              UserRepository userRepository,
-                              PasswordEncoder passwordEncoder,
-                              ObjectMapper objectMapper) {
+    public AuthControllerTest(
+            MockMvc mockMvc,
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            ObjectMapper objectMapper,
+            VerificationCodeRepository verificationCodeRepository) {
         this.mockMvc = mockMvc;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
+        this.verificationCodeRepository = verificationCodeRepository;
     }
 
     @BeforeEach
@@ -58,78 +64,61 @@ class AuthControllerTest {
         userRepository.deleteAll();
     }
 
+    // <editor-fold desc="Registration Tests">
     @Test
     void registerShouldReturnOkWhenValidEmailRequest() throws Exception {
-        // 1: Register new user with email.
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "juan.perez@test.com",
-                null,
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "juan.perez@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("User registered. Please verify your account."));
+                .andExpect(jsonPath("$.message").value("User registered."));
+
+        var user = userRepository.findByEmail("juan.perez@test.com").orElseThrow();
+
+        assertThat(user.getProfile()).isNotNull();
+        assertThat(user.getProfile().getFirstName()).isEqualTo("Juan");
+        assertThat(user.getProfile().getLastName()).isEqualTo("Perez");
+
+        assertThat(user.isEmailVerified()).isTrue();
+        assertThat(user.getRoles()).extracting("name").contains("USER");
     }
 
     @Test
     void registerShouldReturnOkWhenValidPhoneRequest() throws Exception {
-        // 2: Register new user with phone.
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", null, "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("User registered. Please verify your account."));
+                .andExpect(jsonPath("$.message").value("User registered."));
+
+        var user = userRepository.findByPhoneNumber("+59170712345").orElseThrow();
+        assertThat(user.isPhoneVerified()).isTrue();
     }
 
     @Test
     void registerShouldReturnOkWhenValidEmailAndPhoneRequest() throws Exception {
-        // 3: Register new user with email and phone.
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "juan.perez@test.com",
-                "+59170712345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "juan.perez@test.com", "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("User registered. Please verify your account."));
+                .andExpect(jsonPath("$.message").value("User registered."));
     }
 
     @Test
     void registerShouldFailWhenEmailAlreadyExists() throws Exception {
-        // 4: Register new user with existing email.
         var user = new User();
-        user.setFirstName("Existing");
-        user.setLastName("User");
         user.setEmail("existing@test.com");
         user.setPassword(passwordEncoder.encode("Password123!"));
-        user.setRole("ROLE_CUSTOMER");
+        user.setStatus("active");
         userRepository.save(user);
 
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "existing@test.com",
-                null,
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "existing@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -139,22 +128,43 @@ class AuthControllerTest {
 
     @Test
     void registerShouldFailWhenPhoneAlreadyExists() throws Exception {
-        // 5: Register new user with existing phone.
         var user = new User();
-        user.setFirstName("Existing");
-        user.setLastName("User");
         user.setPhoneNumber("+59170712345");
         user.setPassword(passwordEncoder.encode("Password123!"));
-        user.setRole("ROLE_CUSTOMER");
+        user.setStatus("active");
         userRepository.save(user);
 
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
+        var request = new RegisterRequest("Juan", "Perez", null, "+59170712345", "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registerShouldFailWhenNoContactMethodProvided() throws Exception {
+        var request = new RegisterRequest("Juan", "Perez", null, null, "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registerShouldFailWhenPhoneFormatIsInvalid() throws Exception {
+        var request = new RegisterRequest("Juan", "Perez", null, "12345", "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registerShouldFailWhenFirstNameIsMissing() throws Exception {
+        var request = new RegisterRequest(null, "Perez", "juan@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -164,14 +174,7 @@ class AuthControllerTest {
 
     @Test
     void registerShouldFailWhenPasswordIsTooShort() throws Exception {
-        // 6: Register new user with very short password.
-        var request = new RegisterRequest(
-                "Juan",
-                "Perez",
-                "juan.perez@test.com",
-                null,
-                "short"
-        );
+        var request = new RegisterRequest("Juan", "Perez", "juan.perez@test.com", null, "short");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -180,12 +183,44 @@ class AuthControllerTest {
     }
 
     @Test
+    void registerShouldFailWhenEmailExistsWithDifferentCase() throws Exception {
+        var user = new User();
+        user.setEmail("mixedcase@test.com");
+        user.setPassword(passwordEncoder.encode("Password123!"));
+        user.setStatus("active");
+        userRepository.save(user);
+
+        var request = new RegisterRequest("Juan", "Perez", "MixedCase@Test.com", null, "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest());
+    }
+    // </editor-fold>
+
+    // <editor-fold desc="Login Tests">
+    @Test
+    void loginShouldReturnOkWhenCredentialsAreValid() throws Exception {
+        var registerRequest = new RegisterRequest("Login", "Success", "loginsuccess@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
+                .andExpect(status().isOk());
+
+        var loginRequest = new LoginRequest("loginsuccess@test.com", "Password123!");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").exists())
+                .andExpect(jsonPath("$.refreshToken").exists());
+    }
+
+    @Test
     void loginShouldFailWhenEmailInvalid() throws Exception {
-        // 7: Login with invalid email.
-        var request = new LoginRequest(
-                "unknown@test.com",
-                "Password123!"
-        );
+        var request = new LoginRequest("unknown@test.com", "Password123!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -195,11 +230,7 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenPhoneInvalid() throws Exception {
-        // 8: Login with invalid phone.
-        var request = new LoginRequest(
-                "+59100000000",
-                "Password123!"
-        );
+        var request = new LoginRequest("+59100000000", "Password123!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -209,33 +240,14 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenEmailValidButPasswordIncorrect() throws Exception {
-        // 9: Login with valid email + incorrect password.
-        var registerRequest = new RegisterRequest(
-                "Login",
-                "User",
-                "login@test.com",
-                null,
-                "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Login", "User", "login@test.com", null, "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
-        var user = userRepository.findByEmail("login@test.com").orElseThrow();
-        var code = user.getVerification().getEmailVerificationCode();
-        var verifyRequest = new VerifyEmailRequest("login@test.com", code);
-
-        mockMvc.perform(post("/api/auth/email-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var loginRequest = new LoginRequest(
-                "login@test.com",
-                "WrongPassword!"
-        );
+        var loginRequest = new LoginRequest("login@test.com", "WrongPassword!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -245,33 +257,14 @@ class AuthControllerTest {
 
     @Test
     void loginShouldFailWhenPhoneValidButPasswordIncorrect() throws Exception {
-        // 10: Login with valid phone + incorrect password.
-        var registerRequest = new RegisterRequest(
-                "Login",
-                "User",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
+        var registerRequest = new RegisterRequest("Login", "User", null, "+59170712345", "Password123!");
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
-        var user = userRepository.findByPhoneNumber("+59170712345").orElseThrow();
-        var code = user.getVerification().getPhoneVerificationCode();
-        var verifyRequest = new VerifyPhoneRequest("+59170712345", code);
-
-        mockMvc.perform(post("/api/auth/phone-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var loginRequest = new LoginRequest(
-                "+59170712345",
-                "WrongPassword!"
-        );
+        var loginRequest = new LoginRequest("+59170712345", "WrongPassword!");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -280,26 +273,18 @@ class AuthControllerTest {
     }
 
     @Test
-    void loginShouldFailWhenEmailNotVerified() throws Exception {
-        // 11: Login with email but user did not verify email.
-        var registerRequest = new RegisterRequest(
-                "Login",
-                "User",
-                "unverified@test.com",
-                null,
-                "Password123!"
-        );
-
+    void loginShouldFailWhenUserIsSuspended() throws Exception {
+        var registerRequest = new RegisterRequest("Suspended", "User", "suspended@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk());
 
-        var loginRequest = new LoginRequest(
-                "unverified@test.com",
-                "Password123!"
-        );
+        var user = userRepository.findByEmail("suspended@test.com").orElseThrow();
+        user.setStatus("suspended");
+        userRepository.save(user);
 
+        var loginRequest = new LoginRequest("suspended@test.com", "Password123!");
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
@@ -307,26 +292,17 @@ class AuthControllerTest {
     }
 
     @Test
-    void loginShouldFailWhenPhoneNotVerified() throws Exception {
-        // 12: Login with phone but user did not verify phone.
-        var registerRequest = new RegisterRequest(
-                "Login",
-                "User",
-                null,
-                "+59170712345",
-                "Password123!"
-        );
-
+    void loginShouldFailWhenUserIsArchived() throws Exception {
+        var registerRequest = new RegisterRequest("Archived", "User", "archived@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isOk());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
 
-        var loginRequest = new LoginRequest(
-                "+59170712345",
-                "Password123!"
-        );
+        var user = userRepository.findByEmail("archived@test.com").orElseThrow();
+        user.setStatus("archived");
+        userRepository.save(user);
 
+        var loginRequest = new LoginRequest("archived@test.com", "Password123!");
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
@@ -334,232 +310,237 @@ class AuthControllerTest {
     }
 
     @Test
-    void forgotPasswordShouldReturnOkWhenUserExistsWithEmail() throws Exception {
-        // 13: Forgot password with valid email
-        var registerRequest = new RegisterRequest(
-                "Juan", "Perez", "forgot@test.com", null, "Password123!"
-        );
-        mockMvc.perform(post("/api/auth/register")
+    void loginShouldSucceedWithDifferentCaseEmail() throws Exception {
+        var user = new User();
+        user.setEmail("casesensitive@test.com");
+        user.setPassword(passwordEncoder.encode("Password123!"));
+        user.setStatus("active");
+        user.setEmailVerified(true);
+        userRepository.save(user);
+
+        var loginRequest = new LoginRequest("CaseSensitive@Test.com", "Password123!");
+
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andExpect(status().isOk());
+    }
+    // </editor-fold>
+
+    // <editor-fold desc="Refresh Token Tests">
+    @Test
+    void refreshTokenShouldReturnNewAccessToken() throws Exception {
+        var registerRequest = new RegisterRequest("Refresh", "Token", "refresh@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var loginRequest = new LoginRequest("refresh@test.com", "Password123!");
+        String responseJson = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        var authResponse = objectMapper.readValue(responseJson, AuthResponse.class);
+        var refreshRequest = new RefreshTokenRequest(authResponse.refreshToken());
+
+        mockMvc.perform(post("/api/auth/refresh-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").exists());
+    }
+
+    @Test
+    void refreshTokenShouldFailWhenTokenFormatIsInvalid() throws Exception {
+        var refreshRequest = new RefreshTokenRequest("invalid-format");
+
+        mockMvc.perform(post("/api/auth/refresh-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void refreshTokenShouldFailWhenTokenDoesNotExist() throws Exception {
+        var randomId = java.util.UUID.randomUUID();
+        var refreshRequest = new RefreshTokenRequest(randomId + ":some-secret");
+
+        mockMvc.perform(post("/api/auth/refresh-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void refreshTokenShouldFailWhenTokenHashDoesNotMatch() throws Exception {
+        var registerRequest = new RegisterRequest("Hash", "Test", "hash@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var loginRequest = new LoginRequest("hash@test.com", "Password123!");
+        String responseJson = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        var authResponse = objectMapper.readValue(responseJson, AuthResponse.class);
+        String validToken = authResponse.refreshToken();
+        String[] parts = validToken.split(":");
+        String tamperedToken = parts[0] + ":tampered-secret";
+
+        var refreshRequest = new RefreshTokenRequest(tamperedToken);
+
+        mockMvc.perform(post("/api/auth/refresh-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void refreshTokenShouldFailWhenUserIsSuspended() throws Exception {
+        var registerRequest =
+                new RegisterRequest("Suspend", "Refresh", "suspend_refresh@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var loginRequest = new LoginRequest("suspend_refresh@test.com", "Password123!");
+        String responseJson = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        var authResponse = objectMapper.readValue(responseJson, AuthResponse.class);
+
+        var user = userRepository.findByEmail("suspend_refresh@test.com").orElseThrow();
+        user.setStatus("suspended");
+        userRepository.save(user);
+
+        var refreshRequest = new RefreshTokenRequest(authResponse.refreshToken());
+
+        mockMvc.perform(post("/api/auth/refresh-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(refreshRequest)))
+                .andExpect(status().isBadRequest());
+    }
+    // </editor-fold>
+
+    // <editor-fold desc="Password Management Tests">
+    @Test
+    void forgotPasswordShouldGenerateCode() throws Exception {
+        var registerRequest = new RegisterRequest("Forgot", "Test", "forgot@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        var forgotRequest = new ForgotPasswordRequest("forgot@test.com");
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(forgotRequest)))
                 .andExpect(status().isOk());
 
         var user = userRepository.findByEmail("forgot@test.com").orElseThrow();
-        var code = user.getVerification().getEmailVerificationCode();
-        var verifyRequest = new VerifyEmailRequest("forgot@test.com", code);
-
-        mockMvc.perform(post("/api/auth/email-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var forgotRequest = new ForgotPasswordRequest("forgot@test.com");
-
-        mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Password reset code sent."));
+        boolean hasCode = verificationCodeRepository.findAll().stream()
+                .anyMatch(vc -> vc.getUser().getId().equals(user.getId()) && "PASSWORD_RESET".equals(vc.getType()));
+        assertThat(hasCode).isTrue();
     }
 
     @Test
-    void forgotPasswordShouldFailWhenUserDoesNotExist() throws Exception {
-        // 14: Forgot password with non-existent user
-        var forgotRequest = new ForgotPasswordRequest("nonexistent@test.com");
-
-        mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void resetPasswordShouldReturnOkWhenValidRequestWithEmail() throws Exception {
-        // 15: Reset password with valid code (Email)
-        var registerRequest = new RegisterRequest(
-                "Juan", "Perez", "reset@test.com", null, "Password123!"
-        );
+    void resetPasswordShouldUpdatePassword() throws Exception {
+        var registerRequest = new RegisterRequest("Reset", "Test", "reset@test.com", null, "Password123!");
         mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isOk());
-
-        var user = userRepository.findByEmail("reset@test.com").orElseThrow();
-        var verificationCode = user.getVerification().getEmailVerificationCode();
-        var verifyRequest = new VerifyEmailRequest("reset@test.com", verificationCode);
-
-        mockMvc.perform(post("/api/auth/email-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
 
         var forgotRequest = new ForgotPasswordRequest("reset@test.com");
         mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isOk());
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(forgotRequest)));
 
-        user = userRepository.findByEmail("reset@test.com").orElseThrow();
-        String code = user.getVerification().getResetCode();
+        var user = userRepository.findByEmail("reset@test.com").orElseThrow();
+        var codeEntity = verificationCodeRepository.findAll().stream()
+                .filter(vc -> vc.getUser().getId().equals(user.getId()) && "PASSWORD_RESET".equals(vc.getType()))
+                .findFirst()
+                .orElseThrow();
 
-        var resetRequest = new ResetPasswordRequest("reset@test.com", code, "NewPassword123!");
-
+        var resetRequest = new ResetPasswordRequest("reset@test.com", codeEntity.getCode(), "NewPassword456!");
         mockMvc.perform(post("/api/auth/reset-password")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(resetRequest)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Password reset successfully."));
+                .andExpect(status().isOk());
 
-        // Verify login with new password
-        var loginRequest = new LoginRequest("reset@test.com", "NewPassword123!");
+        var loginRequest = new LoginRequest("reset@test.com", "NewPassword456!");
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk());
-    }
 
-    @Test
-    void resetPasswordShouldFailWhenCodeIsInvalid() throws Exception {
-        // 16: Reset password with invalid code
-        var registerRequest = new RegisterRequest(
-                "Juan", "Perez", "reset_invalid@test.com", null, "Password123!"
-        );
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isOk());
-
-        var user = userRepository.findByEmail("reset_invalid@test.com").orElseThrow();
-        var code = user.getVerification().getEmailVerificationCode();
-        var verifyRequest = new VerifyEmailRequest("reset_invalid@test.com", code);
-
-        mockMvc.perform(post("/api/auth/email-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var forgotRequest = new ForgotPasswordRequest("reset_invalid@test.com");
-        mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isOk());
-
-        var resetRequest = new ResetPasswordRequest("reset_invalid@test.com", "wrong-code", "NewPassword123!");
-
-        mockMvc.perform(post("/api/auth/reset-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resetRequest)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void resetPasswordShouldFailWhenPasswordIsWeak() throws Exception {
-        // 17: Reset password with weak password
-        var registerRequest = new RegisterRequest(
-                "Juan", "Perez", "reset_weak@test.com", null, "Password123!"
-        );
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isOk());
-
-        var user = userRepository.findByEmail("reset_weak@test.com").orElseThrow();
-        var verificationCode = user.getVerification().getEmailVerificationCode();
-        var verifyRequest = new VerifyEmailRequest("reset_weak@test.com", verificationCode);
-
-        mockMvc.perform(post("/api/auth/email-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var forgotRequest = new ForgotPasswordRequest("reset_weak@test.com");
-        mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isOk());
-
-        user = userRepository.findByEmail("reset_weak@test.com").orElseThrow();
-        String code = user.getVerification().getResetCode();
-
-        var resetRequest = new ResetPasswordRequest("reset_weak@test.com", code, "weak");
-
-        mockMvc.perform(post("/api/auth/reset-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resetRequest)))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void forgotPasswordShouldReturnOkWhenUserExistsWithPhone() throws Exception {
-        // 18: Forgot password with valid phone
-        var registerRequest = new RegisterRequest(
-                "Maria", "Gomez", null, "+59170712345", "Password123!"
-        );
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isOk());
-
-        var user = userRepository.findByPhoneNumber("+59170712345").orElseThrow();
-        var code = user.getVerification().getPhoneVerificationCode();
-        var verifyRequest = new VerifyPhoneRequest("+59170712345", code);
-
-        mockMvc.perform(post("/api/auth/phone-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var forgotRequest = new ForgotPasswordRequest("+59170712345");
-
-        mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Password reset code sent."));
-    }
-
-    @Test
-    void resetPasswordShouldReturnOkWhenValidRequestWithPhone() throws Exception {
-        // 19: Reset password with valid code (Phone)
-        var registerRequest = new RegisterRequest(
-                "Maria", "Gomez", null, "+59170754321", "Password123!"
-        );
-        mockMvc.perform(post("/api/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(registerRequest)))
-                .andExpect(status().isOk());
-
-        var user = userRepository.findByPhoneNumber("+59170754321").orElseThrow();
-        var verificationCode = user.getVerification().getPhoneVerificationCode();
-        var verifyRequest = new VerifyPhoneRequest("+59170754321", verificationCode);
-
-        mockMvc.perform(post("/api/auth/phone-verification")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(verifyRequest)))
-                .andExpect(status().isOk());
-
-        var forgotRequest = new ForgotPasswordRequest("+59170754321");
-        mockMvc.perform(post("/api/auth/forgot-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(forgotRequest)))
-                .andExpect(status().isOk());
-
-        user = userRepository.findByPhoneNumber("+59170754321").orElseThrow();
-        String code = user.getVerification().getResetCode();
-
-        var resetRequest = new ResetPasswordRequest("+59170754321", code, "NewPassword123!");
-
-        mockMvc.perform(post("/api/auth/reset-password")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(resetRequest)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("Password reset successfully."));
-
-        // Verify login with new password
-        var loginRequest = new LoginRequest("+59170754321", "NewPassword123!");
+        var oldLoginRequest = new LoginRequest("reset@test.com", "Password123!");
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(loginRequest)))
-                .andExpect(status().isOk());
+                        .content(objectMapper.writeValueAsString(oldLoginRequest)))
+                .andExpect(status().isUnauthorized());
     }
+    // </editor-fold>
+
+    // <editor-fold desc="Resend Verification Tests">
+    @Test
+    void resendVerificationShouldFailWhenUserNotFound() throws Exception {
+        var request = """
+                {
+                  "username": "nonexistent@test.com",
+                  "channel": "email"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerificationShouldFailWhenAlreadyVerified() throws Exception {
+        var registerRequest = new RegisterRequest("Test", "User", "verified@test.com", null, "Password123!");
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(registerRequest)));
+
+        // User is auto-verified in test mode (provider = NONE)
+        var request = """
+                {
+                  "username": "verified@test.com",
+                  "channel": "email"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resendVerificationShouldFailWhenInvalidChannel() throws Exception {
+        var request = """
+                {
+                  "username": "test@test.com",
+                  "channel": "invalid"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(request))
+                .andExpect(status().isBadRequest());
+    }
+    // </editor-fold>
 }

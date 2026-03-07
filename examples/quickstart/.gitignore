@@ -1,0 +1,40 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+# macOS
+.DS_Store
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.local
+
+# Database files
+*.db
+
+# Eclipse
+*.classpath
+*.project
+
+# Additional IntelliJ IDEA
+*.iml

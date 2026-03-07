@@ -5,6 +5,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+/**
+ * Configuration for Jackson ObjectMapper.
+ * Registers necessary modules for JSON serialization/deserialization.
+ */
 @Configuration
 public class JacksonConfig {
 

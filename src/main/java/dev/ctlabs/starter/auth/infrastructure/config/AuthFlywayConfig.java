@@ -1,7 +1,7 @@
 package dev.ctlabs.starter.auth.infrastructure.config;
 
-import dev.ctlabs.starter.auth.autoconfigure.AuthProperties;
 import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.flywaydb.core.Flyway;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -10,21 +10,26 @@ import org.springframework.context.annotation.Configuration;
 
 import javax.sql.DataSource;
 
+/**
+ * Configuration for Flyway database migrations for the Auth starter.
+ * Automatically migrates the database schema on startup if enabled.
+ */
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 @ConditionalOnClass(Flyway.class)
-@ConditionalOnProperty(prefix = "ctlabs.auth.db", name = "migration-enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(
+        prefix = "ctlabs.auth.db",
+        name = "migration-enabled",
+        havingValue = "true",
+        matchIfMissing = true)
 public class AuthFlywayConfig {
 
     private final DataSource dataSource;
 
-    public AuthFlywayConfig(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
-
     @PostConstruct
     public void migrateAuthSchema() {
-        log.info(">>> INICIANDO MIGRACIÓN DE AUTH STARTER (ctlabs/auth/migration) <<<");
+        log.info(">>> STARTING AUTH STARTER MIGRATION (ctlabs/auth/migration) <<<");
         try {
             Flyway.configure()
                     .dataSource(dataSource)
@@ -34,9 +39,9 @@ public class AuthFlywayConfig {
                     .baselineVersion("0")
                     .load()
                     .migrate();
-            log.info(">>> MIGRACIÓN DE AUTH STARTER COMPLETADA EXITOSAMENTE <<<");
+            log.info(">>> AUTH STARTER MIGRATION COMPLETED SUCCESSFULLY <<<");
         } catch (Exception e) {
-            log.error(">>> ERROR CRÍTICO EN MIGRACIÓN DE AUTH STARTER <<<", e);
+            log.error(">>> CRITICAL ERROR IN AUTH STARTER MIGRATION <<<", e);
             throw e;
         }
     }
